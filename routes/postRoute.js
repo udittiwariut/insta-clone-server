@@ -1,5 +1,5 @@
 import express from "express";
-
+import multer from "multer";
 import { protect } from "../controllers/authController.js";
 import {
 	getFeedPost,
@@ -10,8 +10,15 @@ import {
 } from "../controllers/postController.js";
 
 const postRouter = express.Router();
+const upload = multer();
+
 postRouter.route("/update").get(update);
-postRouter.route("/").get(protect, getFeedPost).post(protect, createPost);
+
+postRouter
+	.route("/")
+	.get(protect, getFeedPost)
+	.post(protect, upload.single("img"), createPost);
+
 postRouter.route("/like").put(
 	protect,
 	(req, res, next) => {

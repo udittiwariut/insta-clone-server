@@ -3,7 +3,7 @@ export const postComment = async (req, res) => {
 	try {
 		const { postId, commentText, parentId } = req.body;
 
-		const { id } = req.user;
+		const { id } = req.body;
 
 		const newComment = await Comment.create({
 			postId,

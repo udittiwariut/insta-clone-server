@@ -1,32 +1,41 @@
-import express from "express";
 import Post from "../moongoose_schema/postSchema.js";
-
-import bodyParser from "body-parser";
-
-import fs from "fs";
-
-const app = express();
-app.use(express.json());
-app.use(bodyParser.json());
+import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
+import sharpify from "../utlis/sharp/sharp.js";
+import { v4 as uuidv4 } from "uuid";
 
 export const getFeedPost = async (req, res) => {
 	try {
 		const following = req.user.following;
 		const page = parseInt(req.query.page);
-		const limit = 4;
+		const limit = 5;
 
 		const startIndex = (page - 1) * limit;
 
 		const posts = await Post.find({ user: { $in: following } })
+			.sort({ createdAt: -1 })
 			.limit(limit)
 			.skip(startIndex)
 			.populate({
 				path: "user",
 				select: "name img",
 			});
+
+		const postsWithUrlsPromise = posts.map(async (post) => {
+			const url = await getUrl(post.img);
+			return { ...post._doc, img: url };
+		});
+
+		let postsWithUrlPromisified = await Promise.allSettled(
+			postsWithUrlsPromise
+		);
+
+		const postsWithUrl = postsWithUrlPromisified.map((post) => {
+			return post.value;
+		});
+
 		res.status(200).json({
 			status: "Successful",
-			data: { posts },
+			data: postsWithUrl,
 		});
 	} catch (error) {
 		res.status(400).json({
@@ -53,14 +62,31 @@ export const getUserPost = async (req, res) => {
 
 export const createPost = async (req, res) => {
 	try {
-		const doc = await Post.create({
-			caption: req.body.caption,
-			img: req.body.img,
-			user: req.user.id,
+		const userId = req.user._id;
+		const img = req.body.img.split(",")[1];
+		const caption = req.body.caption;
+		const postId = uuidv4();
+
+		const buffer = await sharpify(img);
+
+		const upload = await s3upload(userId, postId, buffer);
+
+		if (!upload.$metadata.httpStatusCode === 200)
+			throw new Error("some thing wrong with s3");
+
+		const post = await Post.create({
+			caption: caption,
+			user: userId,
+			img: `${userId}/${postId}.jpg`,
 		});
-		res.status(200).json({
-			status: "Successful",
-		});
+
+		if (post) {
+			const postUrl = await getUrl(post.img);
+			res.status(200).json({
+				status: "Successful",
+				data: { ...post._doc, img: postUrl },
+			});
+		}
 	} catch (error) {
 		res.status(400).json({
 			status: "createPost failed",
