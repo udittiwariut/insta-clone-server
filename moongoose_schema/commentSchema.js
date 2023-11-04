@@ -1,6 +1,5 @@
 import mongoose from "mongoose";
-import Post from "./postSchema.js";
-import User from "./userSchema.js";
+
 const commentSchema = new mongoose.Schema({
 	commentText: {
 		type: String,

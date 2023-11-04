@@ -1,40 +1,65 @@
 import User from "./../moongoose_schema/userSchema.js";
-export const uploadProfilePic = async (req, res) => {
+import CONSTANTS from "../utlis/constants/constants.js";
+import sharpify from "../utlis/sharp/sharp.js";
+import { s3upload } from "../services/s3-bucket/s3.js";
+
+export const updateProfile = async (req, res) => {
 	try {
-		const newImg = req.body.img;
+		const reqBody = req.body;
+		const userId = req.user.id;
+		const toUpdateField = Object.keys(req.body).reduce((fields, filed) => {
+			if (reqBody[filed]) fields[filed] = reqBody[filed];
+			return fields;
+		}, {});
 
-		await User.findByIdAndUpdate(req.user.id, { img: newImg });
+		if (toUpdateField.img) {
+			const postId = CONSTANTS.PROFILE_PIC_POST_ID;
+			const buffer = await sharpify(toUpdateField.img);
+			const upload = await s3upload(userId, postId, buffer);
+			if (!upload.$metadata.httpStatusCode === 200)
+				throw new Error("some thing wrong with s3");
 
-		res.status(200).json({
-			message: "done",
+			toUpdateField.img = `${userId}/${postId}.jpg`;
+		}
+
+		const updatedUser = await User.findByIdAndUpdate(userId, toUpdateField, {
+			new: true,
+		});
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: updatedUser,
 		});
 	} catch (error) {
 		res.status(400).json({
-			message: error,
+			status: CONSTANTS.FAILED,
+			message: error.message,
 		});
 	}
 };
 
 export const getUser = async (req, res) => {
 	try {
-		
-		const user = await User.findById(req.user.id);
-		res.status(200).json({
-			user,
+		const userId = req.user.id;
+		const user = await User.findById(userId);
+
+		return res.status(200).json({
+			data: user,
 		});
 	} catch (error) {
 		res.status(400).json({
-			message: error,
+			status: CONSTANTS.FAILED,
+			message: error.message,
 		});
 	}
 };
 
 export const followRequest = async (req, res) => {
 	try {
-		const followingReq = await User.findByIdAndUpdate(req.body.userId, {
+		await User.findByIdAndUpdate(req.body.userId, {
 			$push: { followers: req.user.id },
 		});
-		const followerReq = await User.findByIdAndUpdate(req.user.id, {
+		await User.findByIdAndUpdate(req.user.id, {
 			$push: { following: req.body.userId },
 		});
 

@@ -1,6 +1,5 @@
 import express from "express";
 import "dotenv/config";
-import bodyParser from "body-parser";
 import connectMongoes from "./services/mongoose/mongoose.js";
 import cors from "cors";
 import postRouter from "./routes/postRoute.js";
@@ -10,8 +9,9 @@ import chatRouter from "./routes/chatRoute.js";
 import { init } from "./services/s3-bucket/s3.js";
 
 const app = express();
-app.use(express.json());
-app.use(express.urlencoded(true));
+app.use(express.json({ limit: "50mb" }));
+app.use(express.urlencoded({ limit: "50mb" }));
+
 app.use(cors("*"));
 
 connectMongoes();
