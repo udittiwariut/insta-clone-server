@@ -1,6 +1,8 @@
-import mongoose, { model } from "mongoose";
+import mongoose from "mongoose";
 import validator from "validator";
 import bcrypt from "bcryptjs";
+import CONSTANTS from "../utlis/constants/constants.js";
+import { getUrl } from "../services/s3-bucket/s3.js";
 
 const userSchema = new mongoose.Schema({
 	name: {
@@ -14,7 +16,10 @@ const userSchema = new mongoose.Schema({
 		unique: true,
 		validate: validator.isEmail,
 	},
-	img: String,
+	img: {
+		type: String,
+		default: CONSTANTS.DEFAULT_USER_IMG_URL,
+	},
 	password: {
 		type: String,
 		required: true,
@@ -35,7 +40,7 @@ const userSchema = new mongoose.Schema({
 	},
 	bio: {
 		type: String,
-		default: "My inta-Bio",
+		default: "your Instagram Bio",
 	},
 	following: {
 		type: [String],
@@ -46,9 +51,19 @@ const userSchema = new mongoose.Schema({
 	},
 });
 
+userSchema.post(/^find/, async function (doc) {
+	if (doc.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
+		const userId = doc._id;
+		const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
+		const imgUrl = await getUrl(key);
+		doc.img = imgUrl;
+	}
+});
+
 userSchema.pre("save", async function (next) {
 	this.password = await bcrypt.hash(this.password, 12);
 	this.confirmPassword = undefined;
+
 	next();
 });
 userSchema.pre("save", function (next) {

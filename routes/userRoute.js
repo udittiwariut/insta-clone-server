@@ -1,22 +1,16 @@
 import express from "express";
+import { singIn, Login, protect } from "../controllers/authController.js";
 import {
-	singUp,
-	Login,
-	protect,
-	refresh,
-} from "../controllers/authController.js";
-import {
-	uploadProfilePic,
+	updateProfile,
 	getUser,
 	followRequest,
 } from "../controllers/userController.js";
 const userRouter = express.Router();
 
-userRouter.route("/refresh").get(refresh);
-userRouter.route("/singin").post(singUp);
+userRouter.route("/sing-in").post(singIn);
 userRouter.route("/login").post(Login);
 userRouter.route("/").get(protect, getUser);
-userRouter.route("/profile_pic").patch(protect, uploadProfilePic);
+userRouter.route("/update-profile").patch(protect, updateProfile);
 userRouter.route("/followReq").patch(protect, followRequest);
 
 export default userRouter;

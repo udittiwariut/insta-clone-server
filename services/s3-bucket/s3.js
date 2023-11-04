@@ -7,6 +7,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 import Post from "./../../moongoose_schema/postSchema.js";
+import CONSTANTS from "../../utlis/constants/constants.js";
 
 const s3Client = new S3Client({
 	region: "ap-south-1",
@@ -19,11 +20,16 @@ const s3Client = new S3Client({
 export const BUCKET_NAME = "instagram-clone-udit";
 
 export const getUrl = async (key) => {
-	const cmd = new GetObjectCommand({
-		Bucket: BUCKET_NAME,
-		Key: key,
-	});
-	return await getSignedUrl(s3Client, cmd);
+	try {
+		const cmd = new GetObjectCommand({
+			Bucket: BUCKET_NAME,
+			Key: key,
+		});
+		return await getSignedUrl(s3Client, cmd);
+	} catch (error) {
+		console.log("Cannot get img url");
+		return CONSTANTS.DEFAULT_USER_IMG_URL;
+	}
 };
 
 export const s3upload = async (userId, postId, buffer) => {

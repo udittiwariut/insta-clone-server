@@ -1,5 +1,6 @@
 import Post from "../moongoose_schema/postSchema.js";
 import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
+import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
 import { v4 as uuidv4 } from "uuid";
 
@@ -9,7 +10,7 @@ export const getFeedPost = async (req, res) => {
 		const page = parseInt(req.query.page);
 		const limit = 5;
 
-		const startIndex = (page - 1) * limit;
+		const startIndex = page ? limit * page + 1 : 0;
 
 		const posts = await Post.find({ user: { $in: following } })
 			.sort({ createdAt: -1 })
@@ -21,6 +22,37 @@ export const getFeedPost = async (req, res) => {
 			});
 
 		const postsWithUrlsPromise = posts.map(async (post) => {
+			const postUrl = await getUrl(post.img);
+			const userProfilePicUrl = await getUrl(post.user.img);
+			post.img = postUrl;
+			post.user.img = userProfilePicUrl;
+			return post;
+		});
+
+		let postsWithUrlPromisified = await Promise.allSettled(
+			postsWithUrlsPromise
+		);
+
+		const postsWithUrl = postsWithUrlPromisified.map((post) => {
+			return post.value;
+		});
+
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: postsWithUrl,
+		});
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+export const getUserPost = async (req, res) => {
+	try {
+		const userPost = await Post.find({ user: req.user._id });
+
+		const postsWithUrlsPromise = userPost.map(async (post) => {
 			const url = await getUrl(post.img);
 			return { ...post._doc, img: url };
 		});
@@ -34,27 +66,12 @@ export const getFeedPost = async (req, res) => {
 		});
 
 		res.status(200).json({
-			status: "Successful",
+			status: `Successfull`,
 			data: postsWithUrl,
 		});
 	} catch (error) {
 		res.status(400).json({
-			status: "failed",
-			message: error.message,
-		});
-	}
-};
-export const getUserPost = async (req, res) => {
-	try {
-		const userPost = await Post.find({ user: req.user._id });
-		res.status(200).json({
-			status: `Successfull`,
-			length: userPost.length,
-			userPost,
-		});
-	} catch (error) {
-		res.status(400).json({
-			status: `Failed getting user post`,
+			status: "Failed",
 			message: error.message,
 		});
 	}
@@ -63,7 +80,7 @@ export const getUserPost = async (req, res) => {
 export const createPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
-		const img = req.body.img.split(",")[1];
+		const img = req.body.img;
 		const caption = req.body.caption;
 		const postId = uuidv4();
 
@@ -80,13 +97,21 @@ export const createPost = async (req, res) => {
 			img: `${userId}/${postId}.jpg`,
 		});
 
-		if (post) {
-			const postUrl = await getUrl(post.img);
-			res.status(200).json({
-				status: "Successful",
-				data: { ...post._doc, img: postUrl },
-			});
-		}
+		const postWithUser = await post.populate({
+			path: "user",
+			select: "name img",
+		});
+
+		const postUrl = await getUrl(postWithUser.img);
+		const profilePicUrl = await getUrl(postWithUser.user.img);
+
+		postWithUser.img = postUrl;
+		postWithUser.user.img = profilePicUrl;
+
+		res.status(200).json({
+			status: "Successful",
+			data: postWithUser,
+		});
 	} catch (error) {
 		res.status(400).json({
 			status: "createPost failed",
