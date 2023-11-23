@@ -1,5 +1,7 @@
+import mongoose from "mongoose";
 import Post from "../moongoose_schema/postSchema.js";
-import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
+import Comment from "../moongoose_schema/commentSchema.js";
+import { getUrl, s3delete, s3upload } from "../services/s3-bucket/s3.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
 import { v4 as uuidv4 } from "uuid";
@@ -10,10 +12,10 @@ export const getFeedPost = async (req, res) => {
 		const page = parseInt(req.query.page);
 		const limit = 5;
 
-		const startIndex = page ? limit * page + 1 : 0;
+		const startIndex = page !== 0 ? limit * page + 1 : 0;
 
 		const posts = await Post.find({ user: { $in: following } })
-			.sort({ createdAt: -1 })
+			.sort({ createdAt: -1, _id: -1 })
 			.limit(limit)
 			.skip(startIndex)
 			.populate({
@@ -22,6 +24,34 @@ export const getFeedPost = async (req, res) => {
 			});
 
 		const postsWithUrlsPromise = posts.map(async (post) => {
+			const postUrl = await getUrl(post.img);
+			const userProfilePicUrl = await getUrl(post.user.img);
+			post.img = postUrl;
+			post.user.img = userProfilePicUrl;
+			return post;
+		});
+
+		let postsWithUrl = await Promise.all(postsWithUrlsPromise);
+
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: postsWithUrl,
+		});
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+export const getUserPost = async (req, res) => {
+	try {
+		const userPost = await Post.find({ user: req.user._id }).populate({
+			path: "user",
+			select: "name img",
+		});
+
+		const postsWithUrlsPromise = userPost.map(async (post) => {
 			const postUrl = await getUrl(post.img);
 			const userProfilePicUrl = await getUrl(post.user.img);
 			post.img = postUrl;
@@ -44,34 +74,6 @@ export const getFeedPost = async (req, res) => {
 	} catch (error) {
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
-			message: error.message,
-		});
-	}
-};
-export const getUserPost = async (req, res) => {
-	try {
-		const userPost = await Post.find({ user: req.user._id });
-
-		const postsWithUrlsPromise = userPost.map(async (post) => {
-			const url = await getUrl(post.img);
-			return { ...post._doc, img: url };
-		});
-
-		let postsWithUrlPromisified = await Promise.allSettled(
-			postsWithUrlsPromise
-		);
-
-		const postsWithUrl = postsWithUrlPromisified.map((post) => {
-			return post.value;
-		});
-
-		res.status(200).json({
-			status: `Successfull`,
-			data: postsWithUrl,
-		});
-	} catch (error) {
-		res.status(400).json({
-			status: "Failed",
 			message: error.message,
 		});
 	}
@@ -109,47 +111,101 @@ export const createPost = async (req, res) => {
 		postWithUser.user.img = profilePicUrl;
 
 		res.status(200).json({
-			status: "Successful",
+			status: CONSTANTS.SUCCESSFUL,
 			data: postWithUser,
 		});
 	} catch (error) {
 		res.status(400).json({
-			status: "createPost failed",
+			status: CONSTANTS.FAILED,
 			message: error.message,
 		});
 	}
 };
 
-export const likeHnadler = async (req, res) => {
+export const likeHandler = async (req, res) => {
 	try {
-		const { postId } = req.body;
-		if (req.unlike === "true") {
-			await Post.findByIdAndUpdate(postId, {
-				$pull: { likes: req.user.id },
-			});
-		}
+		const postId = req.params.postId;
 
-		if (req.like === "true") {
-			await Post.findByIdAndUpdate(postId, {
-				$push: { likes: req.user.id },
-			});
-		}
-		const recalculatedLike = await Post.findById(postId, { likes: 1 });
-		return res.status(200).json({
-			likes: recalculatedLike,
+		const userId = req.user._id;
+
+		await Post.findByIdAndUpdate(postId, [
+			{
+				$set: {
+					likes: {
+						$cond: [
+							{ $in: [userId, "$likes"] },
+							{
+								$filter: {
+									input: "$likes",
+									as: "like",
+									cond: { $ne: ["$$like", userId] },
+								},
+							},
+							{ $concatArrays: ["$likes", [userId]] },
+						],
+					},
+				},
+			},
+		]);
+
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
-		res.json({
-			error: error.message,
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
 		});
-		return console.log(error.message);
 	}
 };
-export const update = async (req, res) => {
+
+export const getLikes = async (req, res) => {
 	try {
-		await Post.updateMany({}, { $set: { likes: [] } });
-		res.send("done");
+		const postId = req.params.postId;
+		const userId = req.user._id;
+
+		let postLikesInfo = await Post.aggregate([
+			{
+				$match: {
+					_id: mongoose.Types.ObjectId(postId),
+				},
+			},
+			{
+				$project: {
+					likes: { $size: "$likes" },
+					isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
+				},
+			},
+		]);
+
+		postLikesInfo = postLikesInfo[0];
+
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: postLikesInfo,
+		});
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const deletePost = async (req, res) => {
+	try {
+		const postId = req.params.postId;
+		const object = await Post.findByIdAndDelete(postId);
+		await Comment.deleteMany({ postId });
+		await s3delete(object.img);
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+		});
 	} catch (error) {
 		console.log(error.message);
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
 	}
 };

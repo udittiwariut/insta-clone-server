@@ -40,19 +40,9 @@ app.use(
 // 	res.header("Access-Control-Allow-Credentials", true);
 // 	return next();
 // });
-app.use(
-	"/api/v1/comment",
-	(req, res, next) => {
-		res.setHeader("Access-Control-Allow-Origin", "*");
-		res.header("Access-Control-Allow-Origin", "*");
-		res.header("Access-Control-Allow-Methods", "GET, POST");
-		res.header("Access-Control-Allow-Headers", "Content-Type, Authorization");
-		return next();
-	},
-	commentRouter
-);
 app.use("/api/v1/post", postRouter);
 app.use("/api/v1/user", userRouter);
+app.use("/api/v1/comment", commentRouter);
 app.use("/api/v1/chat", chatRouter);
 app.use("/uploadPost", init);
 
