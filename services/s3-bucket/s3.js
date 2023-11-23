@@ -4,6 +4,7 @@ import {
 	GetObjectCommand,
 	PutObjectCommand,
 	ListObjectsV2Command,
+	DeleteObjectCommand,
 } from "@aws-sdk/client-s3";
 
 import Post from "./../../moongoose_schema/postSchema.js";
@@ -47,6 +48,22 @@ export const s3upload = async (userId, postId, buffer) => {
 	} catch (error) {
 		console.error(error);
 		throw new Error("Failed to upload image");
+	}
+};
+
+export const s3delete = async (key) => {
+	const params = {
+		Bucket: BUCKET_NAME,
+		Key: key,
+	};
+
+	const command = new DeleteObjectCommand(params);
+
+	try {
+		await s3Client.send(command);
+		return;
+	} catch (error) {
+		throw new Error(error.message);
 	}
 };
 
