@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 
 export const getFeedPost = async (req, res) => {
 	try {
-		const following = req.user.following;
+		const following = [...req.user.following, req.user._id];
 		const page = parseInt(req.query.page);
 		const limit = 5;
 
@@ -25,9 +25,12 @@ export const getFeedPost = async (req, res) => {
 
 		const postsWithUrlsPromise = posts.map(async (post) => {
 			const postUrl = await getUrl(post.img);
-			const userProfilePicUrl = await getUrl(post.user.img);
 			post.img = postUrl;
-			post.user.img = userProfilePicUrl;
+			if (post.user.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
+				const userProfilePicUrl = await getUrl(post.user.img);
+				post.user.img = userProfilePicUrl;
+			}
+
 			return post;
 		});
 

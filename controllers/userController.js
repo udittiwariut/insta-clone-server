@@ -6,7 +6,7 @@ import { s3upload } from "../services/s3-bucket/s3.js";
 export const updateProfile = async (req, res) => {
 	try {
 		const reqBody = req.body;
-		const userId = req.user.id;
+		const userId = req.user._id;
 		const toUpdateField = Object.keys(req.body).reduce((fields, filed) => {
 			if (reqBody[filed]) fields[filed] = reqBody[filed];
 			return fields;
@@ -40,10 +40,14 @@ export const updateProfile = async (req, res) => {
 
 export const getUser = async (req, res) => {
 	try {
-		const userId = req.user.id;
+		const userIdFromParam = req.query.userId;
+
+		let userId = userIdFromParam || req.user._id;
+
 		const user = await User.findById(userId);
 
 		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
 			data: user,
 		});
 	} catch (error) {
@@ -57,9 +61,9 @@ export const getUser = async (req, res) => {
 export const followRequest = async (req, res) => {
 	try {
 		await User.findByIdAndUpdate(req.body.userId, {
-			$push: { followers: req.user.id },
+			$push: { followers: req.user._id },
 		});
-		await User.findByIdAndUpdate(req.user.id, {
+		await User.findByIdAndUpdate(req.user._id, {
 			$push: { following: req.body.userId },
 		});
 
@@ -73,21 +77,31 @@ export const followRequest = async (req, res) => {
 	}
 };
 
-export const getFollowingUser = async (req, res) => {
+export const getSearchUser = async (req, res) => {
 	try {
-		const following = req.user.following;
+		const getOnlyFollowingUser = req.query.onlyFollowingUser;
+		const searchVal = req.query.search;
 
-		const users = await User.find({ _id: { $in: following } });
+		let query;
 
-		res.status(200).json({
-			message: "success",
-			user: users.length,
-			users,
+		const forName = { name: { $regex: searchVal, $options: "i" } };
+
+		if (getOnlyFollowingUser === "true") {
+			const followingUserIds = req.user.following;
+			query = {
+				$and: [{ _id: { $in: followingUserIds } }, forName],
+			};
+		} else query = forName;
+
+		const users = await User.find(query, { name: 1, img: 1 });
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: users,
 		});
 	} catch (error) {
 		res.status(400).json({
-			message: "Failed",
-			error: error.message,
+			message: error.message,
 		});
 	}
 };
