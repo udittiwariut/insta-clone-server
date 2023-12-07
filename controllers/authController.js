@@ -16,7 +16,6 @@ export const singIn = async (req, res) => {
 		}
 
 		const existingUser = await User.findOne({ $or: [{ email }, { name }] });
-
 		if (existingUser) {
 			if (existingUser.email === email)
 				return res.status(400).json({
@@ -27,10 +26,9 @@ export const singIn = async (req, res) => {
 					message: "Username already taken",
 				});
 		}
-
 		const user = await User.create(data);
 
-		const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+		const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
 			expiresIn: process.env.TOKEN_EXPIRE,
 		});
 
@@ -63,7 +61,7 @@ export const Login = async (req, res) => {
 		if (!(await bcrypt.compare(password, user.password)))
 			throw new Error("Required credential are wrong");
 
-		const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
+		const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
 			expiresIn: process.env.TOKEN_EXPIRE,
 		});
 		// don't delete it men't to be unused
@@ -99,10 +97,10 @@ export const protect = async (req, res, next) => {
 			throw new Error("Invalid token or session expired");
 		}
 
-		if (!decoded.id) {
+		if (!decoded._id) {
 			throw new Error("Invalid token or session expired");
 		}
-		const user = await User.findById(decoded.id);
+		const user = await User.findById(decoded._id);
 
 		if (!user) {
 			throw new Error("User not found");
@@ -111,7 +109,6 @@ export const protect = async (req, res, next) => {
 		req.user = user;
 		next();
 	} catch (error) {
-		console.log(error.message);
 		return res.status(400).json({
 			message: error.message,
 		});
