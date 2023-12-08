@@ -2,6 +2,8 @@ import User from "./../moongoose_schema/userSchema.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
 import { s3upload } from "../services/s3-bucket/s3.js";
+import Post from "../moongoose_schema/postSchema.js";
+import mongoose from "mongoose";
 
 export const updateProfile = async (req, res) => {
 	try {
@@ -58,25 +60,6 @@ export const getUser = async (req, res) => {
 	}
 };
 
-export const followRequest = async (req, res) => {
-	try {
-		await User.findByIdAndUpdate(req.body.userId, {
-			$push: { followers: req.user._id },
-		});
-		await User.findByIdAndUpdate(req.user._id, {
-			$push: { following: req.body.userId },
-		});
-
-		res.status(200).json({
-			message: "Following req compleate",
-		});
-	} catch (error) {
-		res.status(400).json({
-			message: error.message,
-		});
-	}
-};
-
 export const getSearchUser = async (req, res) => {
 	try {
 		const getOnlyFollowingUser = req.query.onlyFollowingUser;
@@ -101,6 +84,60 @@ export const getSearchUser = async (req, res) => {
 		});
 	} catch (error) {
 		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const getUserProfile = async (req, res, next) => {
+	try {
+		const userId = req.params.userId;
+		const posts = await Post.find({ user: userId });
+		const user = await User.findById(userId);
+
+		if (!user) {
+			throw new Error("Invalid User Id");
+		}
+
+		req.userPosts = posts;
+		res.user = user;
+		next();
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const handleFollowToggle = async (req, res) => {
+	try {
+		const actionTriggerUserId = req.user._id;
+		const otherUserId = mongoose.Types.ObjectId(req.params.userId);
+		const currentFollowState = req.query.followState;
+
+		let OPERATOR;
+
+		const actionTriggerQuery = {};
+		const otherUserQuery = {};
+
+		if (currentFollowState === "follow") OPERATOR = "$push";
+		if (currentFollowState === "following") OPERATOR = "$pull";
+
+		actionTriggerQuery[OPERATOR] = { following: otherUserId };
+		otherUserQuery[OPERATOR] = { followers: actionTriggerUserId };
+
+		await User.findByIdAndUpdate(actionTriggerUserId, actionTriggerQuery);
+		await User.findByIdAndUpdate(otherUserId, otherUserQuery);
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			prevFollowState: currentFollowState,
+		});
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
 			message: error.message,
 		});
 	}

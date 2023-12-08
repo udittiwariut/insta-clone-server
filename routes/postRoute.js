@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
 import { protect } from "../controllers/authController.js";
+import { getUserPostWWithUrl } from "../middleWare/getPostWithUrl.js";
 import {
 	getFeedPost,
 	createPost,
@@ -18,7 +19,7 @@ postRouter
 	.get(protect, getFeedPost)
 	.post(protect, upload.single("img"), createPost);
 
-postRouter.route("/userprofile").get(protect, getUserPost);
+postRouter.route("/userprofile").get(protect, getUserPost, getUserPostWWithUrl);
 
 postRouter
 	.route("/:postId")

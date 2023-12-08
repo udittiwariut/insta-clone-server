@@ -11,7 +11,8 @@ export const getAllChat = async (req, res) => {
 
 		let conversations = await Conversation.find({
 			participants: userId,
-		});
+		}).sort({ createdAt: -1, _id: -1 });
+
 		conversations = conversations.map(async (conversation) => {
 			const [chatWithUserId] = conversation.participants.filter(
 				(id) => !id.equals(userId)

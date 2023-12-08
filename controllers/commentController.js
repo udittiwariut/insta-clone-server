@@ -24,10 +24,6 @@ export const postComment = async (req, res) => {
 			select: "name img",
 		});
 
-		const userProfilePicUrl = await getUrl(newComment.user.img);
-
-		newComment.user.img = userProfilePicUrl;
-
 		newComment._doc.replies = 0;
 
 		res.status(200).json({
@@ -85,22 +81,14 @@ export const getPostComment = async (req, res) => {
 			}
 		);
 
-		commentsWithReplyCount = await Comment.populate(commentsWithReplyCount, {
+		const commentsWithUser = await Comment.populate(commentsWithReplyCount, {
 			path: "user",
 			select: "name img",
 		});
 
-		commentsWithReplyCount = commentsWithReplyCount.map(async (comment) => {
-			const imageUrl = await getUrl(comment.user.img);
-			comment.user.img = imageUrl;
-			return comment;
-		});
-
-		const comments = await Promise.all(commentsWithReplyCount);
-
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
-			data: comments,
+			data: commentsWithUser,
 		});
 	} catch (error) {
 		res.status(400).json({
@@ -118,12 +106,13 @@ export const getReplies = async (req, res) => {
 			select: "name img",
 		});
 
+		console.log(replies);
+
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 			data: replies,
 		});
 	} catch (error) {
-		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,

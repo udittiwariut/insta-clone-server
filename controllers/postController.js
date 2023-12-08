@@ -26,49 +26,10 @@ export const getFeedPost = async (req, res) => {
 		const postsWithUrlsPromise = posts.map(async (post) => {
 			const postUrl = await getUrl(post.img);
 			post.img = postUrl;
-			if (post.user.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-				const userProfilePicUrl = await getUrl(post.user.img);
-				post.user.img = userProfilePicUrl;
-			}
-
 			return post;
 		});
 
 		let postsWithUrl = await Promise.all(postsWithUrlsPromise);
-
-		res.status(200).json({
-			status: CONSTANTS.SUCCESSFUL,
-			data: postsWithUrl,
-		});
-	} catch (error) {
-		res.status(400).json({
-			status: CONSTANTS.FAILED,
-			message: error.message,
-		});
-	}
-};
-export const getUserPost = async (req, res) => {
-	try {
-		const userPost = await Post.find({ user: req.user._id }).populate({
-			path: "user",
-			select: "name img",
-		});
-
-		const postsWithUrlsPromise = userPost.map(async (post) => {
-			const postUrl = await getUrl(post.img);
-			const userProfilePicUrl = await getUrl(post.user.img);
-			post.img = postUrl;
-			post.user.img = userProfilePicUrl;
-			return post;
-		});
-
-		let postsWithUrlPromisified = await Promise.allSettled(
-			postsWithUrlsPromise
-		);
-
-		const postsWithUrl = postsWithUrlPromisified.map((post) => {
-			return post.value;
-		});
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -208,6 +169,20 @@ export const deletePost = async (req, res) => {
 		console.log(error.message);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const getUserPost = async (req, res, next) => {
+	try {
+		const userId = req.user._id;
+		const posts = await Post.find({ user: userId });
+		req.userPosts = posts;
+		res.user = req.user;
+		next();
+	} catch (error) {
+		res.status(400).json({
 			message: error.message,
 		});
 	}
