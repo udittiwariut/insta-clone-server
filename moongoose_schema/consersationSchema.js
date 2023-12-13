@@ -11,6 +11,10 @@ const conversationSchema = new mongoose.Schema({
 		type: Boolean,
 		default: false,
 	},
+	updatedAt: {
+		type: Date,
+		default: Date.now(),
+	},
 });
 
 const Conversation = mongoose.model("Conversation", conversationSchema);

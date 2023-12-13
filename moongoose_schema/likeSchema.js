@@ -4,20 +4,17 @@ const likeSchema = new mongoose.Schema({
 	postId: {
 		type: mongoose.Schema.ObjectId,
 		required: true,
+		ref: "Post",
 	},
 	user: {
 		type: mongoose.Schema.ObjectId,
 		required: true,
 		ref: "User",
 	},
-	createdAt: { type: Date },
+	createdAt: { type: Date, default: Date.now() },
 });
 
-likeSchema.pre("save", async function (next) {
-	const date = new Date();
-	this.createdAt = date.getTime();
-	next();
-});
+likeSchema.index({ postId: 1, user: 1 }, { unique: true, dropDups: true });
 
 const Like = mongoose.model("Like", likeSchema);
 

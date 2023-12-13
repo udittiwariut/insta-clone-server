@@ -4,11 +4,14 @@ import express from "express";
 import cors from "cors";
 import SOCKET_CONST from "./socketConts.js";
 import Conversation from "../../moongoose_schema/consersationSchema.js";
+import connectMongoes from "../../services/mongoose/mongoose.js";
 
 const app = express();
 app.use(cors("*"));
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb" }));
+
+connectMongoes();
 
 const server = http.createServer(app);
 const io = new Server(server, {
@@ -29,9 +32,10 @@ io.on("connection", (socket) => {
 	socket.on(SOCKET_CONST.MESSAGE_SEEN, async (data) => {
 		const userId = data.userId;
 		const chatWithUserId = data.chatWithUserId;
+
 		await Conversation.findOneAndUpdate(
 			{
-				$all: [userId, chatWithUserId],
+				participants: { $all: [userId, chatWithUserId] },
 			},
 			{
 				$set: {
@@ -39,6 +43,7 @@ io.on("connection", (socket) => {
 				},
 			}
 		);
+
 		const chatWithUserSocketId = getSocketId(chatWithUserId);
 		if (chatWithUserSocketId) {
 			io.to(chatWithUserSocketId).emit(SOCKET_CONST.ON_MESSAGE_SEEN, {
