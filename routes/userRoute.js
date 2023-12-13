@@ -7,6 +7,7 @@ import {
 	getSearchUser,
 	getUserProfile,
 	handleFollowToggle,
+	getConnectedUser,
 } from "../controllers/userController.js";
 const userRouter = express.Router();
 
@@ -15,6 +16,7 @@ userRouter.route("/login").post(Login);
 userRouter.route("/").get(protect, getUser);
 userRouter.route("/update-profile").patch(protect, updateProfile);
 userRouter.route("/search-user").get(protect, getSearchUser);
+userRouter.route("/getConnectedUser/:id").get(protect, getConnectedUser);
 userRouter
 	.route("/:userId")
 	.get(protect, getUserProfile, getUserPostWWithUrl)

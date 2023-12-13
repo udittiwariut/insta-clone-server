@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import Comment from "../moongoose_schema/commentSchema.js";
-import { getUrl } from "../services/s3-bucket/s3.js";
 import CONSTANTS from "../utlis/constants/constants.js";
+const ObjectId = mongoose.Types.ObjectId;
 
 export const postComment = async (req, res) => {
 	try {
@@ -41,6 +41,7 @@ export const postComment = async (req, res) => {
 export const getPostComment = async (req, res) => {
 	try {
 		const postId = req.params.postId;
+		const userId = req.user._id;
 
 		const commentsArray = await Comment.aggregate([
 			{
@@ -50,6 +51,16 @@ export const getPostComment = async (req, res) => {
 							$match: {
 								postId: mongoose.Types.ObjectId(postId),
 								parentId: null,
+							},
+						},
+						{
+							$addFields: {
+								isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
+							},
+						},
+						{
+							$set: {
+								likes: { $size: "$likes" },
 							},
 						},
 					],
@@ -100,17 +111,30 @@ export const getPostComment = async (req, res) => {
 export const getReplies = async (req, res) => {
 	try {
 		const parentId = req.params.parentId;
+		const userId = req.user._id;
 
-		let replies = await Comment.find({ parentId }).populate({
+		let replies = await Comment.aggregate([
+			{ $match: { parentId: ObjectId(parentId) } },
+			{
+				$addFields: {
+					isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
+				},
+			},
+			{
+				$set: {
+					likes: { $size: "$likes" },
+				},
+			},
+		]);
+
+		const commentWithUserImg = await Comment.populate(replies, {
 			path: "user",
 			select: "name img",
 		});
 
-		console.log(replies);
-
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
-			data: replies,
+			data: commentWithUserImg,
 		});
 	} catch (error) {
 		res.status(400).json({
@@ -152,39 +176,6 @@ export const likeHandler = async (req, res) => {
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
-		});
-	} catch (error) {
-		res.status(400).json({
-			status: CONSTANTS.FAILED,
-			message: error.message,
-		});
-	}
-};
-
-export const getLikes = async (req, res) => {
-	try {
-		const commentId = req.params.commentId;
-		const userId = req.user._id;
-
-		let commentLikesInfo = await Comment.aggregate([
-			{
-				$match: {
-					_id: mongoose.Types.ObjectId(commentId),
-				},
-			},
-			{
-				$project: {
-					likes: { $size: "$likes" },
-					isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
-				},
-			},
-		]);
-
-		commentLikesInfo = commentLikesInfo[0];
-
-		res.status(200).json({
-			status: CONSTANTS.SUCCESSFUL,
-			data: commentLikesInfo,
 		});
 	} catch (error) {
 		res.status(400).json({

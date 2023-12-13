@@ -1,4 +1,4 @@
-import { getUrl } from "../services/s3-bucket/s3.js";
+import postMetaDataCompleter from "../helpers/postMetaDataCompleter.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 
 export const getUserPostWWithUrl = async (req, res) => {
@@ -6,13 +6,7 @@ export const getUserPostWWithUrl = async (req, res) => {
 		const userPost = req.userPosts;
 		const user = res.user;
 
-		const postsWithUrlsPromise = userPost.map(async (post) => {
-			const postUrl = await getUrl(post.img);
-			post.img = postUrl;
-			return post;
-		});
-
-		let postsWithUrl = await Promise.all(postsWithUrlsPromise);
+		let postsWithUrl = await postMetaDataCompleter(userPost, req.user._id);
 
 		const response = {
 			posts: postsWithUrl,

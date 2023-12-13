@@ -7,8 +7,8 @@ import {
 	createPost,
 	getUserPost,
 	likeHandler,
-	getLikes,
 	deletePost,
+	getTrendingPost,
 } from "../controllers/postController.js";
 
 const postRouter = express.Router();
@@ -21,10 +21,11 @@ postRouter
 
 postRouter.route("/userprofile").get(protect, getUserPost, getUserPostWWithUrl);
 
+postRouter.route("/explore").get(protect, getTrendingPost);
+
 postRouter
 	.route("/:postId")
-	.patch(protect, likeHandler)
-	.get(protect, getLikes)
+	.post(protect, likeHandler)
 	.delete(protect, deletePost);
 
 export default postRouter;

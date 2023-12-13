@@ -11,7 +11,7 @@ export const getAllChat = async (req, res) => {
 
 		let conversations = await Conversation.find({
 			participants: userId,
-		}).sort({ createdAt: -1, _id: -1 });
+		}).sort({ updatedAt: -1, _id: -1 });
 
 		conversations = conversations.map(async (conversation) => {
 			const [chatWithUserId] = conversation.participants.filter(
@@ -34,7 +34,6 @@ export const getAllChat = async (req, res) => {
 			data: allChatsWithUser,
 		});
 	} catch (error) {
-		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -94,7 +93,14 @@ export const sendText = async (req, res) => {
 
 		let conversation = await Conversation.findOneAndUpdate(
 			{ participants: { $all: [senderId, receiverId] } },
-			{ $set: { text: text, sender: senderId, seen: false } },
+			{
+				$set: {
+					text: text,
+					sender: senderId,
+					seen: false,
+					updatedAt: Date.now(),
+				},
+			},
 			{ new: true }
 		);
 
@@ -121,7 +127,6 @@ export const sendText = async (req, res) => {
 				sender: senderId,
 				receiver: receiverId,
 				text: text,
-
 				formServer: true,
 			};
 			io.to(recipientSocketId).emit(

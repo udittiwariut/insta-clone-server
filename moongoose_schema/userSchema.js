@@ -43,11 +43,17 @@ const userSchema = new mongoose.Schema({
 		default: "your Instagram Bio",
 	},
 	following: {
-		type: [mongoose.Types.ObjectId],
+		type: [{ type: mongoose.Schema.ObjectId, ref: "User" }],
+		unique: true,
 	},
 	followers: {
-		type: [mongoose.Types.ObjectId],
+		type: [{ type: mongoose.Schema.ObjectId, ref: "User" }],
+		unique: true,
 	},
+});
+
+userSchema.post("findOne", function () {
+	return;
 });
 
 userSchema.post("find", async function (doc) {
@@ -66,7 +72,7 @@ userSchema.post("find", async function (doc) {
 });
 
 userSchema.post(/^find\w/, async function (doc) {
-	if (!doc) return;
+	if (!doc || !doc.img) return;
 	if (doc.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
 		const userId = doc._id;
 		const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
