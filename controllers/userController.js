@@ -18,10 +18,9 @@ export const updateProfile = async (req, res) => {
 			const postId = CONSTANTS.PROFILE_PIC_POST_ID;
 			const buffer = await sharpify(toUpdateField.img);
 			const upload = await s3upload(userId, postId, buffer);
+			toUpdateField.img = `${userId}/${postId}.jpg`;
 			if (!upload.$metadata.httpStatusCode === 200)
 				throw new Error("some thing wrong with s3");
-
-			toUpdateField.img = `${userId}/${postId}.jpg`;
 		}
 
 		const updatedUser = await User.findByIdAndUpdate(userId, toUpdateField, {

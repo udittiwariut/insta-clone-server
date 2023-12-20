@@ -6,6 +6,7 @@ const CONSTANTS = {
 	PROFILE_PIC_POST_ID: "profilePic",
 	FOLLOWING: "following",
 	FOLLOWER: "followers",
+	REDIS_STORY: "story",
 };
 
 export default CONSTANTS;

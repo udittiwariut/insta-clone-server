@@ -41,28 +41,28 @@ export const getFeedPost = async (req, res) => {
 
 export const createPost = async (req, res) => {
 	try {
-		const userId = req.user._id;
+		const user = req.user;
 		const img = req.body.img;
 		const caption = req.body.caption;
-		const postId = uuidv4();
+
+		const key = `posts/${uuidv4()}`;
 
 		const buffer = await sharpify(img);
 
-		const upload = await s3upload(userId, postId, buffer);
+		const upload = await s3upload(user._id, key, buffer);
 
 		if (!upload.$metadata.httpStatusCode === 200)
 			throw new Error("some thing wrong with s3");
 
 		const post = await Post.create({
 			caption: caption,
-			user: userId,
-			img: `${userId}/${postId}.jpg`,
+			user: user._id,
+			img: `${user._id}/${key}.jpg`,
 		});
 
-		const postWithUser = await post.populate({
-			path: "user",
-			select: "name img",
-		});
+		post.user = user;
+
+		const postWithUser = post;
 
 		const postUrl = await getUrl(postWithUser.img);
 
@@ -134,7 +134,10 @@ export const deletePost = async (req, res) => {
 export const getUserPost = async (req, res, next) => {
 	try {
 		const userId = req.user._id;
-		const posts = await Post.find({ user: userId });
+
+		const posts = await Post.find({ user: userId }).sort({
+			createdAt: -1,
+		});
 		req.userPosts = posts;
 		res.user = req.user;
 		next();

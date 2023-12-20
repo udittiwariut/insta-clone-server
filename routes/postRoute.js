@@ -12,7 +12,7 @@ import {
 } from "../controllers/postController.js";
 
 const postRouter = express.Router();
-const upload = multer();
+const upload = multer({ limits: { fieldSize: 25 * 1024 * 1024 } });
 
 postRouter
 	.route("/")
