@@ -5,9 +5,11 @@ import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
 import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
 import redisClient from "../services/redis/redis.js";
+import mongoose from "mongoose";
 
 export const getFeedStories = async (req, res) => {
 	try {
+		const user = req.user;
 		const followingUser = req.user.following;
 
 		const redisSearchQuery = `{${followingUser
@@ -22,41 +24,81 @@ export const getFeedStories = async (req, res) => {
 
 		result = JSON.parse(JSON.stringify(result)).documents;
 
-		let reStructuredStories = result.map(async (document) => {
-			const storyImgsKeyArray = document.value.img;
+		let feedStoriesIds = result.map((doc) =>
+			mongoose.Types.ObjectId(doc.id.split(":")[1])
+		);
 
-			let storyImgsUrl = storyImgsKeyArray.map(async (imgKey) => {
-				return await getUrl(imgKey);
+		let feedStories = await Story.aggregate([
+			{
+				$match: { _id: { $in: feedStoriesIds } },
+			},
+			{
+				$sort: { createdAt: -1, _id: 1 },
+			},
+			{
+				$addFields: {
+					isSeen: { $in: [user._id, "$seenBy"] },
+				},
+			},
+			{
+				$unset: ["seenBy,"],
+			},
+			{
+				$group: {
+					_id: "$user",
+					storiesArray: { $push: "$$ROOT" },
+				},
+			},
+			{
+				$addFields: {
+					user: "$_id",
+				},
+			},
+			{
+				$unset: ["_id"],
+			},
+		]);
+
+		feedStories = await Story.populate(feedStories, {
+			path: "user",
+			select: "name img",
+		});
+
+		const seenStories = [];
+		const unSeenStories = [];
+
+		feedStories = feedStories.map(async ({ storiesArray, user }) => {
+			let isSeenWhole = true;
+			let storiesWithImgUrls = storiesArray.map(async (story) => {
+				const storyImgUrl = await getUrl(story.img);
+				if (!story.isSeen) isSeenWhole = false;
+				story.img = storyImgUrl;
+				return story;
 			});
 
-			storyImgsUrl = await Promise.all(storyImgsUrl);
+			storiesWithImgUrls = await Promise.all(storiesWithImgUrls);
 
-			let userImg = document.value.userImg;
-			if (userImg !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-				userImg = await getUrl(userImg);
-			}
+			storiesWithImgUrls = storiesWithImgUrls.sort(function (o) {
+				return -new Date(o.createdAt);
+			});
 
-			const storyId = document.id.split(":")[1];
+			console.log(storiesWithImgUrls);
 
-			const storyObj = {
-				_id: storyId,
-				img: storyImgsUrl,
-				user: {
-					_id: document.value.userId,
-					name: document.value.userName,
-					img: userImg,
-				},
-				createdAt: document.value.createdAt,
-			};
+			const storyObj = { user, storiesArray: storiesWithImgUrls, isSeenWhole };
+
+			if (isSeenWhole) seenStories.push(storyObj);
+			else unSeenStories.push(storyObj);
 
 			return storyObj;
 		});
 
-		reStructuredStories = await Promise.all(reStructuredStories);
+		await Promise.all(feedStories);
+
+		const sortedAccordingToSeenStatus = [...unSeenStories, ...seenStories];
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
-			data: reStructuredStories,
+			data: sortedAccordingToSeenStatus,
 		});
 	} catch (error) {
 		console.log(error);
@@ -80,64 +122,16 @@ export const postStory = async (req, res) => {
 		if (!upload.$metadata.httpStatusCode === 200)
 			throw new Error("Some thing wrong with s3");
 
-		const isStoryAdded = await redisClient.ft.search(
-			`idx:stories`,
-			`@userId:{${userId}}`
-		);
-
-		if (isStoryAdded.total > 0) {
-			const storyFromRedis = JSON.parse(JSON.stringify(isStoryAdded))
-				.documents[0];
-
-			const updatedStoryImgArray = [
-				...storyFromRedis.value.img,
-				`${userId}/${key}.jpg`,
-			];
-
-			const storyId = storyFromRedis.id.split(":")[1];
-
-			await redisClient.json.merge(
-				storyFromRedis.id,
-				"img",
-				updatedStoryImgArray
-			);
-
-			const updatedStoryInDataBase = await Story.findByIdAndUpdate(
-				storyId,
-				{
-					$push: { img: `${userId}/${key}.jpg` },
-				},
-				{
-					new: true,
-				}
-			);
-
-			return res.status(200).json({
-				status: CONSTANTS.SUCCESSFUL,
-				data: updatedStoryInDataBase,
-			});
-		}
-
 		const story = await Story.create({
 			user: userId,
-			img: [`${userId}/${key}.jpg`],
+			img: `${userId}/${key}.jpg`,
 		});
-
-		let userImgUrl = req.user.img;
-
-		if (userImgUrl !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-			userImgUrl = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
-		}
 
 		await redisClient.json.set(`story:${story._id}`, "$", {
-			img: story.img,
 			userId: story.user.toString(),
-			userImg: userImgUrl,
-			userName: req.user.name,
-			createdAt: story.createdAt.getTime(),
 		});
 
-		// redisClient.expire(`story:${story._id}`, 3600);
+		redisClient.expire(`story:${story._id}`, 3600 * 3);
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -156,9 +150,9 @@ export const updateSeenBy = async (req, res) => {
 		const userId = req.user._id;
 		const storyId = req.params.id;
 
-		const storyInRedis = await redisClient.json.get(`story:${storyId}`);
-
-		console.log(storyInRedis);
+		await Story.findByIdAndUpdate(storyId, {
+			$addToSet: { seenBy: userId },
+		});
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,

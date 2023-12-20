@@ -11,11 +11,6 @@ const createIndex = async () => {
 					type: SchemaFieldTypes.TAG,
 					AS: "userId",
 				},
-				"$.createdAt": {
-					type: SchemaFieldTypes.NUMERIC,
-					SORTABLE: true,
-					AS: "createdAt",
-				},
 			},
 			{
 				ON: "JSON",

@@ -78,6 +78,7 @@ userSchema.post(/^find\w/, async function (doc) {
 		const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
 		const imgUrl = await getUrl(key);
 		doc.img = imgUrl;
+
 		return doc;
 	}
 });

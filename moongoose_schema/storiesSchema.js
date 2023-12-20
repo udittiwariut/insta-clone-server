@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 const storySchema = new mongoose.Schema({
 	img: {
-		type: [String],
+		type: "String",
 	},
 	user: {
 		type: mongoose.Schema.ObjectId,
