@@ -3,14 +3,18 @@ import Comment from "../moongoose_schema/commentSchema.js";
 import { getUrl, s3delete, s3upload } from "../services/s3-bucket/s3.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4, v4 } from "uuid";
 import Like from "../moongoose_schema/likeSchema.js";
 import postMetaDataCompleter from "../helpers/postMetaDataCompleter.js";
+import mongoose from "mongoose";
+import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
 
 export const getFeedPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
-		const following = [...req.user.following, userId];
+		const following = [...req.user.following, userId].map((id) =>
+			mongoose.Types.ObjectId(id)
+		);
 		const page = parseInt(req.query.page);
 		const limit = 5;
 
@@ -18,6 +22,7 @@ export const getFeedPost = async (req, res) => {
 
 		const posts = await Post.find({ user: { $in: following } })
 			.sort({ createdAt: -1, _id: -1 })
+
 			.limit(limit)
 			.skip(startIndex)
 			.populate({
@@ -123,7 +128,6 @@ export const deletePost = async (req, res) => {
 			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
-		console.log(error.message);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -135,9 +139,17 @@ export const getUserPost = async (req, res, next) => {
 	try {
 		const userId = req.user._id;
 
+		const user = req.user._doc;
+
 		const posts = await Post.find({ user: userId }).sort({
 			createdAt: -1,
 		});
+
+		const { isStory, isSeen } = await storySeenInfo(userId, userId);
+
+		user.isStory = isStory;
+		user.isSeen = isSeen;
+
 		req.userPosts = posts;
 		res.user = req.user;
 		next();
@@ -211,10 +223,17 @@ export const getTrendingPost = async (req, res) => {
 				userImgUrl = await getUrl(userImgUrl);
 				post.user.img = userImgUrl;
 			}
+
+			const { isSeen, isStory } = await storySeenInfo(post.user._id, userId);
+
+			post.user.isSeen = isSeen;
+			post.user.isStory = isStory;
+
 			const isLiked = await Like.findOne({
 				user: userId,
 				postId: post._id,
 			});
+			post.key = v4();
 			post.img = postUrl;
 			post.isLiked = isLiked ? true : false;
 			return post;

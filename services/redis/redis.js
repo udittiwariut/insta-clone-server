@@ -1,11 +1,18 @@
 import { createClient } from "redis";
 
-const redisClient = createClient(6379, "127.0.0.1");
+const redisClient = createClient(process.env.REDIS_PORT, "127.0.0.1");
 
-await redisClient.connect();
-redisClient.on("error", (err) => {
-	console.log(err);
-	console.log("Error occured while connecting or accessing redis server");
-});
+redisClient
+	.connect()
+	.then(() => {
+		redisClient.ft.configSet("MAXSEARCHRESULTS", "3000000");
+
+		console.log(
+			"CONNECTION TO REDIS SUCCESSFUL ON PORT " + process.env.REDIS_PORT
+		);
+	})
+	.catch((error) => {
+		console.log(error);
+	});
 
 export default redisClient;

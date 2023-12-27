@@ -4,6 +4,7 @@ import sharpify from "../utlis/sharp/sharp.js";
 import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
 import Post from "../moongoose_schema/postSchema.js";
 import mongoose from "mongoose";
+import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
 
 export const updateProfile = async (req, res) => {
 	try {
@@ -41,36 +42,25 @@ export const updateProfile = async (req, res) => {
 
 export const getUser = async (req, res) => {
 	try {
-		const userIdFromParam = req.query.userId;
+		const user = req.user;
 
-		let userId = userIdFromParam || req.user._id;
-
-		let user = await User.aggregate([
-			{
-				$match: { _id: userId },
-			},
-			{
-				$set: {
-					following: { $size: "$following" },
-					followers: { $size: "$followers" },
-				},
-			},
-		]);
-
-		user = user[0];
-
-		if (user.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-			const userId = user._id;
-			const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
-			const imgUrl = await getUrl(key);
-			user.img = imgUrl;
+		if (!user) {
+			throw new Error("No user found");
 		}
+
+		const isStorySeen = await storySeenInfo(user._id, user._id);
+
+		user._doc.isStory = isStorySeen.isStory;
+		user._doc.isSeen = isStorySeen.isSeen;
+		user._doc.following = user.following.length;
+		user._doc.followers = user.followers.length;
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 			data: user,
 		});
 	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -112,7 +102,11 @@ export const getUserProfile = async (req, res, next) => {
 	try {
 		const mainUserId = req.user._id;
 		const userId = req.params.userId;
-		const posts = await Post.find({ user: userId });
+
+		const posts = await Post.find({ user: userId }).sort({
+			createdAt: -1,
+			_id: -1,
+		});
 
 		let user = await User.aggregate([
 			{
@@ -125,6 +119,14 @@ export const getUserProfile = async (req, res, next) => {
 					followers: { $size: "$followers" },
 				},
 			},
+			{
+				$replaceWith: {
+					$unsetField: {
+						field: "password",
+						input: "$$ROOT",
+					},
+				},
+			},
 		]);
 
 		user = user[0];
@@ -135,6 +137,11 @@ export const getUserProfile = async (req, res, next) => {
 			const imgUrl = await getUrl(key);
 			user.img = imgUrl;
 		}
+
+		const { isStory, isSeen } = await storySeenInfo(user._id, mainUserId);
+
+		user.isStory = isStory;
+		user.isSeen = isSeen;
 
 		if (!user) {
 			throw new Error("Invalid User Id");

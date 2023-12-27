@@ -7,6 +7,7 @@ const CONSTANTS = {
 	FOLLOWING: "following",
 	FOLLOWER: "followers",
 	REDIS_STORY: "story",
+	STORY_SEEN: "storySeen",
 };
 
 export default CONSTANTS;

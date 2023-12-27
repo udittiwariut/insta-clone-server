@@ -6,7 +6,11 @@ export const getUserPostWWithUrl = async (req, res) => {
 		const userPost = req.userPosts;
 		const user = res.user;
 
-		let postsWithUrl = await postMetaDataCompleter(userPost, req.user._id);
+		let postsWithUrl = await postMetaDataCompleter(
+			userPost,
+			req.user._id,
+			true
+		);
 
 		const response = {
 			posts: postsWithUrl,
