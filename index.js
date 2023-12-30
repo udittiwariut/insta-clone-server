@@ -11,7 +11,7 @@ app.use("/api/v1/post", postRouter);
 app.use("/api/v1/user", userRouter);
 app.use("/api/v1/comment", commentRouter);
 app.use("/api/v1/chat", chatRouter);
-app.use("/api/v1/like", likeRouter);
+// app.use("/api/v1/like", likeRouter);
 app.use("/api/v1/story", storyRouter);
 
 server.listen(process.env.PORT, () => {
