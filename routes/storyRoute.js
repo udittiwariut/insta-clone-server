@@ -5,6 +5,8 @@ import {
 	updateSeenBy,
 	getSpecificUserStory,
 	getSeenInfo,
+	likeToggle,
+	getInteractionDetail,
 } from "../controllers/storyController.js";
 import { protect } from "../controllers/authController.js";
 import multer from "multer";
@@ -18,7 +20,12 @@ storyRouter
 	.get(protect, getFeedStories)
 	.post(protect, upload.single("img"), postStory);
 
-storyRouter.route("/:id").patch(protect, updateSeenBy);
+storyRouter
+	.route("/:id")
+	.patch(protect, updateSeenBy)
+	.get(protect, getInteractionDetail);
+
+storyRouter.route("/likes/:id").patch(protect, likeToggle);
 
 storyRouter.route("/seen/:userId").get(protect, getSeenInfo);
 

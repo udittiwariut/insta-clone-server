@@ -17,9 +17,11 @@ const storySeenInfo = async (storyByUserId, mainUserId) => {
 			let isSeenWhole = true;
 			const storyPromise = result.documents.map(async (doc) => {
 				let storyObjectId = doc.id.split(":")[1];
-				const isSeen = await redisClient.get(
-					`${CONSTANTS.STORY_SEEN}-${storyObjectId}-${mainUserId}`
+
+				const isSeen = await redisClient.json.get(
+					`${CONSTANTS.STORY_SEEN_BY}${storyObjectId}-${mainUserId}`
 				);
+
 				if (isSeen === null) {
 					isSeenWhole = false;
 				}

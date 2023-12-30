@@ -3,7 +3,6 @@ import validator from "validator";
 import bcrypt from "bcryptjs";
 import CONSTANTS from "../utlis/constants/constants.js";
 import { getUrl } from "../services/s3-bucket/s3.js";
-import redisClient from "../services/redis/redis.js";
 
 const userSchema = new mongoose.Schema({
 	name: {

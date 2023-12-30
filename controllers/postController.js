@@ -22,7 +22,6 @@ export const getFeedPost = async (req, res) => {
 
 		const posts = await Post.find({ user: { $in: following } })
 			.sort({ createdAt: -1, _id: -1 })
-
 			.limit(limit)
 			.skip(startIndex)
 			.populate({
@@ -72,6 +71,13 @@ export const createPost = async (req, res) => {
 		const postUrl = await getUrl(postWithUser.img);
 
 		postWithUser.img = postUrl;
+
+		postWithUser._doc.likes = 0;
+
+		const { isStory, isSeen } = await storySeenInfo(user._id, user._id);
+
+		post.user._doc.isStory = isStory;
+		post.user._doc.isSeen = isSeen;
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -139,7 +145,7 @@ export const getUserPost = async (req, res, next) => {
 	try {
 		const userId = req.user._id;
 
-		const user = req.user._doc;
+		const { following, email, followers, bio, ...user } = req.user._doc;
 
 		const posts = await Post.find({ user: userId }).sort({
 			createdAt: -1,
@@ -151,7 +157,7 @@ export const getUserPost = async (req, res, next) => {
 		user.isSeen = isSeen;
 
 		req.userPosts = posts;
-		res.user = req.user;
+		res.user = user;
 		next();
 	} catch (error) {
 		res.status(400).json({

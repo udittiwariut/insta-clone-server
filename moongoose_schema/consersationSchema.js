@@ -7,6 +7,10 @@ const conversationSchema = new mongoose.Schema({
 	},
 	text: String,
 	sender: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+	isRepliedToStory: {
+		type: Boolean,
+		default: false,
+	},
 	seen: {
 		type: Boolean,
 		default: false,

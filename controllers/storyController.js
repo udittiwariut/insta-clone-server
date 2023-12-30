@@ -6,10 +6,15 @@ import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
 import redisClient from "../services/redis/redis.js";
 import mongoose from "mongoose";
 import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
-import { redisSearch } from "../utlis/redisHelper/redisHelper.js";
+import {
+	redisSearch,
+	redisSearchSeenBy,
+} from "../utlis/redisHelper/redisHelper.js";
+import User from "../moongoose_schema/userSchema.js";
 
 export const getFeedStories = async (req, res) => {
 	try {
+		const mainUserId = req.user._id;
 		const followingUser = req.user.following;
 
 		const redisSearchQuery = `${followingUser
@@ -60,8 +65,8 @@ export const getFeedStories = async (req, res) => {
 			let isSeenWhole = true;
 			let storiesWithImgUrls = storiesArray.map(async (story) => {
 				const storyImgUrl = await getUrl(story.img);
-				const isSeen = await redisClient.get(
-					`${CONSTANTS.STORY_SEEN}-${story._id}-${req.user._id}`
+				const isSeen = await redisClient.json.get(
+					`${CONSTANTS.STORY_SEEN_BY}${story._id}-${mainUserId}`
 				);
 				if (!isSeen) {
 					isSeenWhole = false;
@@ -157,18 +162,29 @@ export const updateSeenBy = async (req, res) => {
 		const userId = req.user._id;
 		const storyId = req.params.id;
 
-		let getTtlOfStory = await redisClient.ttl(`story:${storyId}`);
+		let ttlOfStory = await redisClient.ttl(`story:${storyId}`);
 
-		await redisClient.set(
-			`${CONSTANTS.STORY_SEEN}-${storyId}-${userId}`,
-			"true",
-			{ EX: getTtlOfStory }
-		);
+		const redisJsonKey = `${CONSTANTS.STORY_SEEN_BY}${storyId}-${userId}`;
+
+		const isAlreadySeen = await redisClient.json.get(redisJsonKey);
+
+		if (isAlreadySeen) {
+			throw new Error("Already Seen! can't have 2 seen on same story");
+		}
+
+		await redisClient.json.set(redisJsonKey, "$", {
+			storyId: storyId,
+			isLiked: 0,
+			userId: userId,
+		});
+
+		redisClient.expire(redisJsonKey, ttlOfStory);
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -180,31 +196,19 @@ export const likeToggle = async (req, res) => {
 	try {
 		const storyId = req.params.id;
 		const userId = req.user._id;
+		const isLiked = req.query.isLiked;
 
-		await Story.findByIdAndUpdate(storyId, [
-			{
-				$set: {
-					likes: {
-						$cond: [
-							{ $in: [userId, "$likes"] },
-							{
-								$filter: {
-									input: "$likes",
-									as: "like",
-									cond: { $ne: ["$$like", userId] },
-								},
-							},
-							{ $concatArrays: ["$likes", [userId]] },
-						],
-					},
-				},
-			},
-		]);
+		const storyKey = `${CONSTANTS.STORY_SEEN_BY}${storyId}-${userId}`;
+
+		if (isLiked === "true") {
+			await redisClient.json.merge(storyKey, "$.isLiked", 0);
+		} else await redisClient.json.merge(storyKey, "$.isLiked", 1);
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -215,8 +219,10 @@ export const likeToggle = async (req, res) => {
 export const getSpecificUserStory = async (req, res) => {
 	try {
 		const userId = req.params.userId;
+		const mainUserId = req.user._id;
 
 		let result = await redisSearch(userId);
+
 		if (result.total === 0) throw new Error("No story found");
 
 		result = JSON.parse(JSON.stringify(result)).documents;
@@ -233,12 +239,7 @@ export const getSpecificUserStory = async (req, res) => {
 				$sort: { createdAt: 1, _id: 1 },
 			},
 			{
-				$addFields: {
-					isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
-				},
-			},
-			{
-				$project: { img: 1, isLiked: 1 },
+				$project: { img: 1 },
 			},
 		]);
 
@@ -246,16 +247,36 @@ export const getSpecificUserStory = async (req, res) => {
 
 		let storiesWithImgUrls = storiesArray.map(async (story) => {
 			const storyImgUrl = await getUrl(story.img);
-			const isSeen = await redisClient.get(
-				`${CONSTANTS.STORY_SEEN}-${story._id}-${req.user._id}`
-			);
-			if (!isSeen) {
+			const redisJsonKey = `${CONSTANTS.STORY_SEEN_BY}${story._id}-${mainUserId}`;
+
+			const seenByObj = await redisClient.json.get(redisJsonKey);
+
+			if (seenByObj === null) {
 				isSeenWhole = false;
 				story.isSeen = false;
+				story.isLiked = false;
 			} else {
 				story.isSeen = true;
+				story.isLiked = Boolean(seenByObj.isLiked);
 			}
+
 			story.img = storyImgUrl;
+
+			/// double = to match value not type
+			if (userId == mainUserId) {
+				let seenBy = await redisSearchSeenBy(story._id.toString(), true);
+				const userIds = seenBy.documents.map(({ value }) => value.userId);
+
+				const users = await User.find({ _id: { $in: userIds } }, { img: 1 });
+
+				seenBy = {
+					count: seenBy.total,
+					topUsers: users,
+				};
+
+				story.seenBy = seenBy;
+			}
+
 			return story;
 		});
 
@@ -281,11 +302,42 @@ export const getSeenInfo = async (req, res) => {
 
 		const seenInfo = await storySeenInfo(storyByUserId, mainUserId);
 
-		res.status(200).json({
+		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 			data: seenInfo,
 		});
 	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const getInteractionDetail = async (req, res) => {
+	try {
+		const storyId = req.params.id;
+
+		const { documents } = await redisSearchSeenBy(storyId, false);
+
+		const users = documents.map(({ value }) => {
+			const userObj = {};
+			userObj.user = value.userId;
+			userObj.isLiked = Boolean(value.isLiked);
+			return userObj;
+		});
+
+		const interactedUser = await User.populate(users, {
+			path: "user",
+			select: "name img",
+		});
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: interactedUser,
+		});
+	} catch (error) {
+		console.log(error.message);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
