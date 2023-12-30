@@ -88,7 +88,9 @@ export const sendText = async (req, res) => {
 	try {
 		const senderId = req.user._id;
 		const receiverId = req.params.chatWithUserId;
+		const storyId = req.query.storyId;
 		const text = req.body.text;
+
 		let isNewConversation = false;
 
 		let conversation = await Conversation.findOneAndUpdate(
@@ -99,6 +101,7 @@ export const sendText = async (req, res) => {
 					sender: senderId,
 					seen: false,
 					updatedAt: Date.now(),
+					isRepliedToStory: storyId ? true : false,
 				},
 			},
 			{ new: true }
@@ -109,6 +112,7 @@ export const sendText = async (req, res) => {
 				participants: [senderId, receiverId],
 				text: text,
 				sender: senderId,
+				isRepliedToStory: storyId ? true : false,
 			});
 			isNewConversation = true;
 		}
@@ -117,22 +121,25 @@ export const sendText = async (req, res) => {
 			sender: senderId,
 			conversationId: conversation._id,
 			text,
+			isRepliedToStory: storyId ? storyId : false,
 		});
 
 		const recipientSocketId = getSocketId(receiverId);
 
 		if (recipientSocketId !== SOCKET_CONST.OFFLINE) {
-			const chatBody = {
-				_id: chat._id,
-				sender: senderId,
-				receiver: receiverId,
-				text: text,
-				formServer: true,
-			};
-			io.to(recipientSocketId).emit(
-				SOCKET_CONST.MESSAGE_SENT_FROM_SERVER,
-				chatBody
-			);
+			if (!isNewConversation) {
+				const chatBody = {
+					_id: chat._id,
+					sender: senderId,
+					receiver: receiverId,
+					text: text,
+					formServer: true,
+				};
+				io.to(recipientSocketId).emit(
+					SOCKET_CONST.MESSAGE_SENT_FROM_SERVER,
+					chatBody
+				);
+			}
 
 			if (isNewConversation) {
 				const conversationWithSenderUser = conversation;

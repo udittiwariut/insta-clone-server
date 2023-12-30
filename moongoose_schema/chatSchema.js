@@ -14,6 +14,10 @@ const chatSchema = new mongoose.Schema({
 		type: String,
 		required: true,
 	},
+	isRepliedToStory: {
+		type: mongoose.Schema.Types.Mixed,
+		default: false,
+	},
 	createdAt: { type: Date },
 });
 chatSchema.pre("save", async function (next) {

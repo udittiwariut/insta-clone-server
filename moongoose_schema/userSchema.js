@@ -63,6 +63,7 @@ userSchema.post("find", async function (doc) {
 			const userId = user._id;
 			const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
 			const imgUrl = await getUrl(key);
+
 			user.img = imgUrl;
 		}
 		return user;
@@ -77,7 +78,9 @@ userSchema.post(/^find\w/, async function (doc) {
 		const userId = doc._id;
 		const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
 		const imgUrl = await getUrl(key);
+
 		doc.img = imgUrl;
+
 		return doc;
 	}
 });

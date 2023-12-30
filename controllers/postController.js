@@ -3,14 +3,18 @@ import Comment from "../moongoose_schema/commentSchema.js";
 import { getUrl, s3delete, s3upload } from "../services/s3-bucket/s3.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv4, v4 } from "uuid";
 import Like from "../moongoose_schema/likeSchema.js";
 import postMetaDataCompleter from "../helpers/postMetaDataCompleter.js";
+import mongoose from "mongoose";
+import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
 
 export const getFeedPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
-		const following = [...req.user.following, userId];
+		const following = [...req.user.following, userId].map((id) =>
+			mongoose.Types.ObjectId(id)
+		);
 		const page = parseInt(req.query.page);
 		const limit = 5;
 
@@ -41,32 +45,39 @@ export const getFeedPost = async (req, res) => {
 
 export const createPost = async (req, res) => {
 	try {
-		const userId = req.user._id;
+		const user = req.user;
 		const img = req.body.img;
 		const caption = req.body.caption;
-		const postId = uuidv4();
+
+		const key = `posts/${uuidv4()}`;
 
 		const buffer = await sharpify(img);
 
-		const upload = await s3upload(userId, postId, buffer);
+		const upload = await s3upload(user._id, key, buffer);
 
 		if (!upload.$metadata.httpStatusCode === 200)
 			throw new Error("some thing wrong with s3");
 
 		const post = await Post.create({
 			caption: caption,
-			user: userId,
-			img: `${userId}/${postId}.jpg`,
+			user: user._id,
+			img: `${user._id}/${key}.jpg`,
 		});
 
-		const postWithUser = await post.populate({
-			path: "user",
-			select: "name img",
-		});
+		post.user = user;
+
+		const postWithUser = post;
 
 		const postUrl = await getUrl(postWithUser.img);
 
 		postWithUser.img = postUrl;
+
+		postWithUser._doc.likes = 0;
+
+		const { isStory, isSeen } = await storySeenInfo(user._id, user._id);
+
+		post.user._doc.isStory = isStory;
+		post.user._doc.isSeen = isSeen;
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -123,7 +134,6 @@ export const deletePost = async (req, res) => {
 			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
-		console.log(error.message);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -134,9 +144,20 @@ export const deletePost = async (req, res) => {
 export const getUserPost = async (req, res, next) => {
 	try {
 		const userId = req.user._id;
-		const posts = await Post.find({ user: userId });
+
+		const { following, email, followers, bio, ...user } = req.user._doc;
+
+		const posts = await Post.find({ user: userId }).sort({
+			createdAt: -1,
+		});
+
+		const { isStory, isSeen } = await storySeenInfo(userId, userId);
+
+		user.isStory = isStory;
+		user.isSeen = isSeen;
+
 		req.userPosts = posts;
-		res.user = req.user;
+		res.user = user;
 		next();
 	} catch (error) {
 		res.status(400).json({
@@ -208,10 +229,17 @@ export const getTrendingPost = async (req, res) => {
 				userImgUrl = await getUrl(userImgUrl);
 				post.user.img = userImgUrl;
 			}
+
+			const { isSeen, isStory } = await storySeenInfo(post.user._id, userId);
+
+			post.user.isSeen = isSeen;
+			post.user.isStory = isStory;
+
 			const isLiked = await Like.findOne({
 				user: userId,
 				postId: post._id,
 			});
+			post.key = v4();
 			post.img = postUrl;
 			post.isLiked = isLiked ? true : false;
 			return post;

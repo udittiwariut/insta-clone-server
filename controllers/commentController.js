@@ -1,10 +1,14 @@
 import mongoose from "mongoose";
 import Comment from "../moongoose_schema/commentSchema.js";
 import CONSTANTS from "../utlis/constants/constants.js";
+import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
+import getDateDiff from "../utlis/dateDiff/getDateDiff.js";
 const ObjectId = mongoose.Types.ObjectId;
 
 export const postComment = async (req, res) => {
 	try {
+		const { following, email, followers, bio, ...user } = req.user._doc;
+
 		const postId = req.params.postId;
 		const parentId = req.query.parentId === "null" ? null : req.query.parentId;
 		const replyTo = req.query.replyToId === "null" ? null : req.query.replyToId;
@@ -18,13 +22,16 @@ export const postComment = async (req, res) => {
 			parentId,
 			replyTo,
 		});
+		newComment._doc.user = user;
 
-		newComment = await newComment.populate({
-			path: "user",
-			select: "name img",
-		});
+		newComment._doc.commentAge = getDateDiff(newComment.createdAt);
 
-		newComment._doc.replies = 0;
+		const { isStory, isSeen } = await storySeenInfo(userId, userId);
+
+		newComment.user.isStory = isStory;
+		newComment.user.isSeen = isSeen;
+
+		console.log(newComment);
 
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -43,65 +50,74 @@ export const getPostComment = async (req, res) => {
 		const postId = req.params.postId;
 		const userId = req.user._id;
 
-		const commentsArray = await Comment.aggregate([
+		let commentsArray = await Comment.aggregate([
 			{
-				$facet: {
-					parentComment: [
-						{
-							$match: {
-								postId: mongoose.Types.ObjectId(postId),
-								parentId: null,
-							},
-						},
-						{
-							$addFields: {
-								isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
-							},
-						},
-						{
-							$set: {
-								likes: { $size: "$likes" },
-							},
-						},
-					],
-					replies: [
-						{
-							$match: {
-								postId: mongoose.Types.ObjectId(postId),
-								parentId: { $ne: null },
-							},
-						},
-						{
-							$group: {
-								_id: "$parentId",
-								count: { $sum: 1 },
-							},
-						},
-					],
+				$match: {
+					postId: mongoose.Types.ObjectId(postId),
+					parentId: null,
 				},
 			},
+			{
+				$sort: {
+					createdAt: -1,
+					_id: -1,
+				},
+			},
+			{
+				$addFields: {
+					isLiked: { $cond: [{ $in: [userId, "$likes"] }, true, false] },
+				},
+			},
+
+			{
+				$set: {
+					likes: { $size: "$likes" },
+				},
+			},
+			{
+				$lookup: {
+					from: "comments",
+					let: {
+						parentId: "$_id",
+					},
+					pipeline: [
+						{
+							$match: { $expr: { $eq: ["$parentId", "$$parentId"] } },
+						},
+						{
+							$count: "count",
+						},
+					],
+					as: "replies",
+				},
+			},
+			{ $unwind: { path: "$replies", preserveNullAndEmptyArrays: true } },
 		]);
 
-		let commentsWithReplyCount = commentsArray[0].parentComment.map(
-			(rootComment) => {
-				const replyCount = commentsArray[0].replies.find((reply) => {
-					return reply._id.toString() === rootComment._id.toString();
-				});
-				if (replyCount) return { ...rootComment, replies: replyCount.count };
-				else return { ...rootComment, replies: 0 };
-			}
-		);
-
-		const commentsWithUser = await Comment.populate(commentsWithReplyCount, {
+		let commentsWithUser = await Comment.populate(commentsArray, {
 			path: "user",
 			select: "name img",
 		});
 
+		let commentsWithUserAndStoryInfo = commentsWithUser.map(async (comment) => {
+			const commentUserId = comment.user._id;
+			const { isSeen, isStory } = await storySeenInfo(commentUserId, userId);
+			comment.user._doc.isStory = isStory;
+			comment.user._doc.isSeen = isSeen;
+			comment.commentAge = getDateDiff(comment.createdAt);
+			return comment;
+		});
+
+		commentsWithUserAndStoryInfo = await Promise.all(
+			commentsWithUserAndStoryInfo
+		);
+
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
-			data: commentsWithUser,
+			data: commentsWithUserAndStoryInfo,
 		});
 	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,

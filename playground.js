@@ -1,18 +1,67 @@
-import Chat from "./moongoose_schema/chatSchema.js";
-import connectMongoes from "./services/mongoose/mongoose.js";
-import "dotenv/config";
+import redisClient from "./services/redis/redis.js";
+import { SchemaFieldTypes } from "redis";
+import CONSTANTS from "./utlis/constants/constants.js";
 
-connectMongoes();
+const createIndexStory = async () => {
+	try {
+		await redisClient.ft.create(
+			"idx:stories",
+			{
+				"$.userId": {
+					type: SchemaFieldTypes.TAG,
+					AS: "userId",
+				},
+			},
+			{
+				ON: "JSON",
+				PREFIX: "story:",
+			}
+		);
+		console.log(CONSTANTS.SUCCESSFUL);
+		process.exit(1);
+	} catch (e) {
+		if (e.message === "Index already exists") {
+			console.log("Index exists already, skipped creation.");
+		} else {
+			// Something went wrong, perhaps RediSearch isn't installed...
+			console.error(e);
+			process.exit(1);
+		}
+	}
+};
 
-Chat.create({
-	sender: "6540c7ec851b84c32704b57c",
-	receiver: "655f5a16e97b9a5273a69309",
-	text: "Hello",
-	conversationId: "awfegjhgfhtherwsfdgfnhtg",
-})
-	.then(() => {
-		console.log("successFull");
-	})
-	.catch((error) => {
-		console.log(error);
-	});
+const createIndexStoryInteractions = async () => {
+	try {
+		await redisClient.ft.create(
+			"idx:storyInteractions",
+			{
+				"$.storyId": {
+					type: SchemaFieldTypes.TAG,
+					AS: "storyId",
+				},
+				"$.isLiked": {
+					type: SchemaFieldTypes.NUMERIC,
+					AS: "isLiked",
+					SORTABLE: true,
+				},
+			},
+			{
+				ON: "JSON",
+				PREFIX: CONSTANTS.STORY_SEEN_BY,
+			}
+		);
+		console.log(CONSTANTS.SUCCESSFUL);
+		process.exit(1);
+	} catch (e) {
+		if (e.message === "Index already exists") {
+			console.log("Index exists already, skipped creation.");
+		} else {
+			// Something went wrong, perhaps RediSearch isn't installed...
+			console.error(e);
+			process.exit(1);
+		}
+	}
+};
+
+createIndexStoryInteractions();
+// createIndexStory();

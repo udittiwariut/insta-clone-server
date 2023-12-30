@@ -33,10 +33,10 @@ export const getUrl = async (key) => {
 	}
 };
 
-export const s3upload = async (userId, postId, buffer) => {
+export const s3upload = async (userId, key, buffer) => {
 	const params = {
 		Bucket: BUCKET_NAME,
-		Key: `${userId}/${postId}.jpg`,
+		Key: `${userId}/${key}.jpg`,
 		Body: buffer,
 	};
 
