@@ -5,6 +5,11 @@ import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
 import Post from "../moongoose_schema/postSchema.js";
 import mongoose from "mongoose";
 import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
+import {
+	NOTIFICATION_EVENT,
+	createNotification,
+} from "../utlis/notification/notification.js";
+import Notification from "../moongoose_schema/notificationSchema.js";
 
 export const updateProfile = async (req, res) => {
 	try {
@@ -169,8 +174,36 @@ export const handleFollowToggle = async (req, res) => {
 		const actionTriggerQuery = {};
 		const otherUserQuery = {};
 
-		if (currentFollowState === "follow") OPERATOR = "$push";
-		if (currentFollowState === "following") OPERATOR = "$pull";
+		if (currentFollowState === "follow") {
+			OPERATOR = "$push";
+			createNotification({
+				userId: mongoose.Types.ObjectId(otherUserId),
+				eventText: NOTIFICATION_EVENT.FOLLOWED_YOU,
+				interactedUser: mongoose.Types.ObjectId(actionTriggerUserId),
+				interactedWith: NOTIFICATION_EVENT.INTERACTED_WITH_USER,
+				relatedImg: null,
+				relatedPost: null,
+				type: NOTIFICATION_EVENT.FOLLOW,
+			});
+		}
+		if (currentFollowState === "following") {
+			OPERATOR = "$pull";
+
+			// first time precautions
+
+			await Notification.findOneAndUpdate(
+				{
+					user: otherUserId,
+					interactedUser: actionTriggerUserId,
+					relatedPost: null,
+				},
+				[
+					{
+						$set: { isDeleted: { $eq: [false, "$isDeleted"] } },
+					},
+				]
+			);
+		}
 
 		actionTriggerQuery[OPERATOR] = { following: otherUserId };
 		otherUserQuery[OPERATOR] = { followers: actionTriggerUserId };

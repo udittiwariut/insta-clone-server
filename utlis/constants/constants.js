@@ -10,6 +10,8 @@ const CONSTANTS = {
 	STORY_SEEN: "storySeen",
 	STORY_SEEN_BY: "seenBy:",
 	REPLIED_TO_YOUR_STORY: "Replied to your Story",
+	END_OF_EXPLORE_PAGE: "End of page",
+	STORY_EXPIRED: "Story Expired",
 };
 
 export default CONSTANTS;

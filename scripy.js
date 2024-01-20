@@ -1,12 +1,12 @@
-import connectMongoes from "./services/mongoose/mongoose.js";
-import Story from "./moongoose_schema/storiesSchema.js";
-import "dotenv/config";
+// import connectMongoes from "./services/mongoose/mongoose.js";
+// import Story from "./moongoose_schema/storiesSchema.js";
+// import "dotenv/config";
 
-connectMongoes();
+// connectMongoes();
 
-Story.updateMany(
-	{},
-	{
-		$set: { seenBy: [] },
-	}
-);
+// // Notification.updateMany(
+// // 	{},
+// // 	{
+// // 		$set: { : [] },
+// // 	}
+// // );

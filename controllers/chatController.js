@@ -154,6 +154,8 @@ export const sendText = async (req, res) => {
 					conversationWithSenderUser
 				);
 			}
+
+			io.to(recipientSocketId).emit(SOCKET_CONST.NEW_MESSAGE, { senderId });
 		}
 
 		const successfulRes = {
@@ -173,6 +175,31 @@ export const sendText = async (req, res) => {
 
 		return res.status(200).json(successfulRes);
 	} catch (error) {
+		return res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const getUnseenCount = async (req, res) => {
+	try {
+		const userId = req.user._id;
+		const countOfUnseenConversations = await Conversation.find(
+			{
+				participants: { $in: [userId] },
+				sender: { $ne: userId },
+				seen: false,
+			},
+			{ _id: 1 }
+		).count();
+
+		res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: countOfUnseenConversations,
+		});
+	} catch (error) {
+		console.log(error);
 		return res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,

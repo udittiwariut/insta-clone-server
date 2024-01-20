@@ -11,7 +11,7 @@ const PostSchema = new mongoose.Schema(
 		},
 		createdAt: {
 			type: Date,
-			default: Date.now(),
+			default: Date.now,
 		},
 		user: {
 			type: mongoose.Schema.ObjectId,
@@ -33,6 +33,8 @@ PostSchema.virtual("likes", {
 });
 
 PostSchema.pre("find", function () {
+	const options = this.getOptions();
+	if (options.disableMiddlewares) return;
 	this.populate("likes");
 });
 

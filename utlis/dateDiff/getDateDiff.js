@@ -1,9 +1,9 @@
 const MILL_SEC_IN_DAY = 1000 * 60 * 60 * 24;
 const MILL_SEC_IN_HOUR = 1000 * 60 * 60;
 const MILL_SEC_IN_MIN = 1000 * 60;
-const getDateDiff = (date1) => {
-	const prevDate = new Date(date1).getTime();
-	const diffTime = Date.now() - prevDate;
+const getDateDiff = (date1, date2) => {
+	const prevDate = new Date(date1);
+	const diffTime = date2 - prevDate.getTime();
 
 	let timePassed;
 

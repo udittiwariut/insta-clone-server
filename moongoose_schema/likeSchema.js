@@ -11,7 +11,7 @@ const likeSchema = new mongoose.Schema({
 		required: true,
 		ref: "User",
 	},
-	createdAt: { type: Date, default: Date.now() },
+	createdAt: { type: Date, default: Date.now },
 });
 
 likeSchema.index({ postId: 1, user: 1 }, { unique: true, dropDups: true });

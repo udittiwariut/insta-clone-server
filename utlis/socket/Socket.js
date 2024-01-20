@@ -5,6 +5,7 @@ import cors from "cors";
 import SOCKET_CONST from "./socketConts.js";
 import Conversation from "../../moongoose_schema/consersationSchema.js";
 import connectMongoes from "../../services/mongoose/mongoose.js";
+import Notification from "../../moongoose_schema/notificationSchema.js";
 
 const app = express();
 app.use(cors("*"));
@@ -52,8 +53,14 @@ io.on("connection", (socket) => {
 		}
 	});
 
-	socket.on("disconnect", () => {
-		delete users[userId];
+	socket.on("disconnect", async () => {
+		try {
+			await Notification.deleteMany({ user: userId, isDeleted: true });
+
+			delete users[userId];
+		} catch (error) {
+			console.log(error);
+		}
 	});
 });
 

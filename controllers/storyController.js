@@ -2,15 +2,21 @@ import { v4 as uuidv4 } from "uuid";
 import Story from "../moongoose_schema/storiesSchema.js";
 import CONSTANTS from "../utlis/constants/constants.js";
 import sharpify from "../utlis/sharp/sharp.js";
-import { getUrl, s3upload } from "../services/s3-bucket/s3.js";
+import { getUrl, s3delete, s3upload } from "../services/s3-bucket/s3.js";
 import redisClient from "../services/redis/redis.js";
 import mongoose from "mongoose";
 import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
 import {
+	redisDelete,
 	redisSearch,
 	redisSearchSeenBy,
 } from "../utlis/redisHelper/redisHelper.js";
 import User from "../moongoose_schema/userSchema.js";
+import {
+	NOTIFICATION_EVENT,
+	createNotification,
+} from "../utlis/notification/notification.js";
+import Notification from "../moongoose_schema/notificationSchema.js";
 
 export const getFeedStories = async (req, res) => {
 	try {
@@ -195,14 +201,29 @@ export const updateSeenBy = async (req, res) => {
 export const likeToggle = async (req, res) => {
 	try {
 		const storyId = req.params.id;
-		const userId = req.user._id;
+		const user = req.user;
 		const isLiked = req.query.isLiked;
 
-		const storyKey = `${CONSTANTS.STORY_SEEN_BY}${storyId}-${userId}`;
+		const storyKey = `${CONSTANTS.STORY_SEEN_BY}${storyId}-${user._id}`;
 
 		if (isLiked === "true") {
 			await redisClient.json.merge(storyKey, "$.isLiked", 0);
 		} else await redisClient.json.merge(storyKey, "$.isLiked", 1);
+
+		const story = await Story.findById(storyId, {
+			user: 1,
+			img: 1,
+		});
+
+		createNotification({
+			userId: story.user,
+			interactedUser: user,
+			relatedPost: storyId,
+			relatedImg: story.img,
+			eventText: NOTIFICATION_EVENT.LIKED_YOUR_STORY,
+			type: NOTIFICATION_EVENT.LIKE,
+			interactedWith: NOTIFICATION_EVENT.INTERACTED_WITH_STORY,
+		});
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -338,6 +359,86 @@ export const getInteractionDetail = async (req, res) => {
 		});
 	} catch (error) {
 		console.log(error.message);
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const getIndividualStory = async (req, res) => {
+	try {
+		const storyId = req.params.storyId;
+		const user = req.user;
+
+		const story = await Story.findById(storyId);
+
+		const storyImgUrl = await getUrl(story.img);
+
+		story.img = storyImgUrl;
+
+		const resObject = {
+			isSeenWhole: true,
+			user: { _id: user._id, name: user.name, img: user.img },
+			storiesArray: [],
+		};
+
+		const isStoryPresent = await redisClient.json.get(`story:${storyId}`);
+
+		let seenBy = CONSTANTS.STORY_EXPIRED;
+
+		if (isStoryPresent) {
+			let redisSearchResult = await redisSearchSeenBy(storyId, true);
+
+			const userIds = redisSearchResult.documents.map(
+				({ value }) => value.userId
+			);
+
+			const users = await User.find({ _id: { $in: userIds } }, { img: 1 });
+
+			seenBy = {
+				count: redisSearchResult.total,
+				topUsers: users,
+			};
+		}
+
+		story._doc.seenBy = seenBy;
+		story._doc.isSeen = true;
+
+		resObject.storiesArray = [story];
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: resObject,
+		});
+	} catch (error) {
+		res.status(400).json({
+			status: CONSTANTS.FAILED,
+			message: error.message,
+		});
+	}
+};
+
+export const deleteStory = async (req, res) => {
+	try {
+		const storyId = req.params.id;
+
+		const deletedStory = await Story.findByIdAndDelete(storyId);
+
+		await redisDelete(deletedStory._id);
+
+		const SAf = await Notification.deleteMany({
+			relatedPost: deletedStory._id.toString(),
+		});
+
+		s3delete(deletedStory.img);
+
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: deletedStory,
+		});
+	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,

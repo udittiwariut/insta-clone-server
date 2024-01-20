@@ -5,11 +5,14 @@ import {
 	getAllChat,
 	getChat,
 	sendText,
+	getUnseenCount,
 } from "../controllers/chatController.js";
 
 const chatRouter = express.Router();
 
 chatRouter.route("/").get(protect, getAllChat);
+
+chatRouter.route("/unseen_count").get(protect, getUnseenCount);
 
 chatRouter
 	.route("/:chatWithUserId")

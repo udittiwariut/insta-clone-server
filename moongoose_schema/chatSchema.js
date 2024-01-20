@@ -18,12 +18,7 @@ const chatSchema = new mongoose.Schema({
 		type: mongoose.Schema.Types.Mixed,
 		default: false,
 	},
-	createdAt: { type: Date },
-});
-chatSchema.pre("save", async function (next) {
-	const date = new Date();
-	this.createdAt = date.getTime();
-	next();
+	createdAt: { type: Date, default: Date.now },
 });
 
 const Chat = mongoose.model("Chat", chatSchema);

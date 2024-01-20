@@ -5,6 +5,8 @@ import {
 	getPostComment,
 	getReplies,
 	likeHandler,
+	getCommentForModal,
+	deleteComment,
 } from "../controllers/commentController.js";
 
 const commentRouter = express.Router();
@@ -14,6 +16,10 @@ commentRouter
 	.get(protect, getPostComment)
 	.post(protect, postComment)
 	.patch(protect, likeHandler);
+
+commentRouter.route("/comment/:id").delete(protect, deleteComment);
+
+commentRouter.route("/individual/:commentId").get(protect, getCommentForModal);
 
 commentRouter.route("/replies/:parentId").get(protect, getReplies);
 

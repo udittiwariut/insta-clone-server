@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import Notification from "./notificationSchema.js";
 
 const commentSchema = new mongoose.Schema({
 	commentText: {
@@ -26,11 +27,11 @@ const commentSchema = new mongoose.Schema({
 	likes: {
 		type: [mongoose.Schema.ObjectId],
 	},
-	createdAt: { type: Date, default: Date.now() },
+	createdAt: { type: Date, default: Date.now },
 });
 
 commentSchema.pre(/^find/, async function (next) {
-	if (this.options.disableMiddlewares) next();
+	if (this.options.disableMiddlewares) return;
 	this.populate({ path: "user", select: "name img" });
 	next();
 });

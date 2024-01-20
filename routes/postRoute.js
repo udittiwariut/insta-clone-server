@@ -9,6 +9,7 @@ import {
 	likeHandler,
 	deletePost,
 	getTrendingPost,
+	getIndividualPost,
 } from "../controllers/postController.js";
 
 const postRouter = express.Router();
@@ -22,6 +23,8 @@ postRouter
 postRouter.route("/userprofile").get(protect, getUserPost, getUserPostWWithUrl);
 
 postRouter.route("/explore").get(protect, getTrendingPost);
+
+postRouter.route("/individual/:postId").get(protect, getIndividualPost);
 
 postRouter
 	.route("/:postId")

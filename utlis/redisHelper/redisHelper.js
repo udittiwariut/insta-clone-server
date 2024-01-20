@@ -7,6 +7,30 @@ const options = {
 	},
 };
 
+export const redisDelete = async (key) => {
+	try {
+		let found = [];
+
+		const getKeys = async (newCursor = 0) => {
+			let pattern = `*${key}*`;
+			const { keys, cursor } = await redisClient.scan(newCursor, {
+				MATCH: pattern,
+				COUNT: 1,
+			});
+
+			found = found.concat(keys);
+			if (cursor === 0) return;
+			else await getKeys(cursor);
+		};
+
+		await getKeys();
+
+		await redisClient.del(found);
+	} catch (error) {
+		throw Error(error.message);
+	}
+};
+
 export const redisSearch = async (query) => {
 	let result = await redisClient.ft.search(
 		`idx:stories`,

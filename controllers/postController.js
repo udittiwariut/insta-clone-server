@@ -8,14 +8,23 @@ import Like from "../moongoose_schema/likeSchema.js";
 import postMetaDataCompleter from "../helpers/postMetaDataCompleter.js";
 import mongoose from "mongoose";
 import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
+import {
+	NOTIFICATION_EVENT,
+	createNotification,
+} from "../utlis/notification/notification.js";
+import isDifferenceOneMonth from "../utlis/dateDiff/isDiffIsOneMonth.js";
+import Notification from "../moongoose_schema/notificationSchema.js";
 
 export const getFeedPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
+
 		const following = [...req.user.following, userId].map((id) =>
 			mongoose.Types.ObjectId(id)
 		);
+
 		const page = parseInt(req.query.page);
+
 		const limit = 5;
 
 		const startIndex = page !== 0 ? limit * page + 1 : 0;
@@ -48,6 +57,9 @@ export const createPost = async (req, res) => {
 		const user = req.user;
 		const img = req.body.img;
 		const caption = req.body.caption;
+
+		user._doc.following = user.following.length;
+		user._doc.followers = user.followers.length;
 
 		const key = `posts/${uuidv4()}`;
 
@@ -95,9 +107,16 @@ export const likeHandler = async (req, res) => {
 	try {
 		const postId = req.params.postId;
 
-		const userId = req.user._id;
+		const user = req.user;
+
+		const userId = user._id;
 
 		const isLiked = req.query.isLiked;
+
+		const post = await Post.findById(postId, {
+			user: 1,
+			img: 1,
+		});
 
 		if (isLiked === "true") {
 			await Like.deleteOne({
@@ -112,7 +131,17 @@ export const likeHandler = async (req, res) => {
 			});
 		}
 
-		res.status(200).json({
+		createNotification({
+			userId: post.user,
+			interactedUser: user,
+			relatedPost: postId,
+			relatedImg: post.img,
+			eventText: NOTIFICATION_EVENT.LIKED_YOUR_POST,
+			type: NOTIFICATION_EVENT.LIKE,
+			interactedWith: NOTIFICATION_EVENT.INTERACTED_WITH_POST,
+		});
+
+		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 		});
 	} catch (error) {
@@ -126,10 +155,17 @@ export const likeHandler = async (req, res) => {
 export const deletePost = async (req, res) => {
 	try {
 		const postId = req.params.postId;
+
 		const object = await Post.findByIdAndDelete(postId);
+
 		await Comment.deleteMany({ postId });
+
 		await Like.deleteMany({ postId });
-		await s3delete(object.img);
+
+		await Notification.deleteMany({ relatedImg: object.img });
+
+		s3delete(object.img);
+
 		res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 		});
@@ -145,6 +181,7 @@ export const getUserPost = async (req, res, next) => {
 	try {
 		const userId = req.user._id;
 
+		// eslint-disable-next-line no-unused-vars
 		const { following, email, followers, bio, ...user } = req.user._doc;
 
 		const posts = await Post.find({ user: userId }).sort({
@@ -169,12 +206,15 @@ export const getUserPost = async (req, res, next) => {
 export const getTrendingPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
-		const toSubNumber = req.query.upToDate;
-		const fromDate = new Date();
-		const upToDate = new Date();
+		const fromDate = new Date(req.query.fromDate);
+		const upToDate = new Date(req.query.upToDate);
 
-		fromDate.setDate(fromDate.getDate() - parseInt(toSubNumber));
-		upToDate.setDate(fromDate.getDate() - 3);
+		if (isDifferenceOneMonth(new Date(), upToDate)) {
+			return res.status(200).json({
+				status: CONSTANTS.SUCCESSFUL,
+				data: CONSTANTS.END_OF_EXPLORE_PAGE,
+			});
+		}
 
 		const sortedAccordingLikes = await Like.aggregate([
 			{
@@ -256,6 +296,47 @@ export const getTrendingPost = async (req, res) => {
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
 			data: postsWithUrlObj,
+		});
+	} catch (error) {
+		return res.status(400).json({
+			message: error.message,
+		});
+	}
+};
+
+export const getIndividualPost = async (req, res) => {
+	try {
+		const postId = req.params.postId;
+		const userId = req.user._id;
+
+		const post = await Post.findById(postId)
+			.populate({
+				path: "likes",
+			})
+			.populate({
+				path: "user",
+				select: "name img",
+			});
+
+		const postUrl = await getUrl(post.img);
+
+		post.img = postUrl;
+
+		const isLiked = await Like.findOne({
+			user: userId,
+			postId: post._id,
+		});
+
+		const { isStory, isSeen } = await storySeenInfo(post.user._id, userId);
+
+		post.user._doc.isStory = isStory;
+		post.user._doc.isSeen = isSeen;
+
+		post._doc.isLiked = isLiked ? true : false;
+		post._doc.likes = post.likes;
+		return res.status(200).json({
+			status: CONSTANTS.SUCCESSFUL,
+			data: post,
 		});
 	} catch (error) {
 		return res.status(400).json({
