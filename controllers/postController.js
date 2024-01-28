@@ -6,7 +6,6 @@ import sharpify from "../utlis/sharp/sharp.js";
 import { v4 as uuidv4, v4 } from "uuid";
 import Like from "../moongoose_schema/likeSchema.js";
 import postMetaDataCompleter from "../helpers/postMetaDataCompleter.js";
-import mongoose from "mongoose";
 import storySeenInfo from "../utlis/storySeen/storySeenInfo.js";
 import {
 	NOTIFICATION_EVENT,
@@ -14,14 +13,16 @@ import {
 } from "../utlis/notification/notification.js";
 import isDifferenceOneMonth from "../utlis/dateDiff/isDiffIsOneMonth.js";
 import Notification from "../moongoose_schema/notificationSchema.js";
+import User from "../moongoose_schema/userSchema.js";
+import getUserImgUrl from "../helpers/getUserImgUrl.js";
 
 export const getFeedPost = async (req, res) => {
 	try {
 		const userId = req.user._id;
 
-		const following = [...req.user.following, userId].map((id) =>
-			mongoose.Types.ObjectId(id)
-		);
+		const userFollowingList = await User.findById(userId, { following: 1 });
+
+		const following = [...userFollowingList.following, userId];
 
 		const page = parseInt(req.query.page);
 
@@ -54,29 +55,26 @@ export const getFeedPost = async (req, res) => {
 
 export const createPost = async (req, res) => {
 	try {
-		const user = req.user;
+		const userId = req.user._id;
 		const img = req.body.img;
 		const caption = req.body.caption;
-
-		user._doc.following = user.following.length;
-		user._doc.followers = user.followers.length;
 
 		const key = `posts/${uuidv4()}`;
 
 		const buffer = await sharpify(img);
 
-		const upload = await s3upload(user._id, key, buffer);
+		const upload = await s3upload(userId, key, buffer);
 
 		if (!upload.$metadata.httpStatusCode === 200)
 			throw new Error("some thing wrong with s3");
 
-		const post = await Post.create({
+		let post = await Post.create({
 			caption: caption,
-			user: user._id,
-			img: `${user._id}/${key}.jpg`,
+			user: userId,
+			img: `${userId}/${key}.jpg`,
 		});
 
-		post.user = user;
+		post = await Post.populate(post, { path: "user", select: "name img" });
 
 		const postWithUser = post;
 
@@ -86,7 +84,7 @@ export const createPost = async (req, res) => {
 
 		postWithUser._doc.likes = 0;
 
-		const { isStory, isSeen } = await storySeenInfo(user._id, user._id);
+		const { isStory, isSeen } = await storySeenInfo(userId, userId);
 
 		post.user._doc.isStory = isStory;
 		post.user._doc.isSeen = isSeen;
@@ -96,6 +94,7 @@ export const createPost = async (req, res) => {
 			data: postWithUser,
 		});
 	} catch (error) {
+		console.log(error);
 		res.status(400).json({
 			status: CONSTANTS.FAILED,
 			message: error.message,
@@ -182,7 +181,13 @@ export const getUserPost = async (req, res, next) => {
 		const userId = req.user._id;
 
 		// eslint-disable-next-line no-unused-vars
-		const { following, email, followers, bio, ...user } = req.user._doc;
+
+		const user = await User.findById(userId, {
+			following: 0,
+			email: 0,
+			followers: 0,
+			bio: 0,
+		});
 
 		const posts = await Post.find({ user: userId }).sort({
 			createdAt: -1,
@@ -263,12 +268,7 @@ export const getTrendingPost = async (req, res) => {
 
 		const postsWithUrlsPromise = postWithLikeCount.map(async (post) => {
 			const postUrl = await getUrl(post.img);
-			let userImgUrl = post.user.img;
-
-			if (userImgUrl !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-				userImgUrl = await getUrl(userImgUrl);
-				post.user.img = userImgUrl;
-			}
+			post.user = await getUserImgUrl(post.user);
 
 			const { isSeen, isStory } = await storySeenInfo(post.user._id, userId);
 

@@ -29,9 +29,29 @@ export const updateProfile = async (req, res) => {
 				throw new Error("some thing wrong with s3");
 		}
 
-		const updatedUser = await User.findByIdAndUpdate(userId, toUpdateField, {
-			new: true,
-		});
+		await User.findByIdAndUpdate(userId, toUpdateField);
+
+		let updatedUser = await User.aggregate([
+			{
+				$match: { _id: mongoose.Types.ObjectId(userId) },
+			},
+			{
+				$set: {
+					following: { $size: "$following" },
+					followers: { $size: "$followers" },
+				},
+			},
+			{
+				$replaceWith: {
+					$unsetField: {
+						field: "password",
+						input: "$$ROOT",
+					},
+				},
+			},
+		]);
+
+		updatedUser = updatedUser[0];
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -47,7 +67,28 @@ export const updateProfile = async (req, res) => {
 
 export const getUser = async (req, res) => {
 	try {
-		const user = req.user;
+		const userId = req.user._id;
+		let user = await User.aggregate([
+			{
+				$match: { _id: mongoose.Types.ObjectId(userId) },
+			},
+			{
+				$set: {
+					following: { $size: "$following" },
+					followers: { $size: "$followers" },
+				},
+			},
+			{
+				$replaceWith: {
+					$unsetField: {
+						field: "password",
+						input: "$$ROOT",
+					},
+				},
+			},
+		]);
+
+		user = user[0];
 
 		if (!user) {
 			throw new Error("No user found");
@@ -55,10 +96,8 @@ export const getUser = async (req, res) => {
 
 		const isStorySeen = await storySeenInfo(user._id, user._id);
 
-		user._doc.isStory = isStorySeen.isStory;
-		user._doc.isSeen = isStorySeen.isSeen;
-		user._doc.following = user.following.length;
-		user._doc.followers = user.followers.length;
+		user.isStory = isStorySeen.isStory;
+		user.isSeen = isStorySeen.isSeen;
 
 		return res.status(200).json({
 			status: CONSTANTS.SUCCESSFUL,
@@ -77,15 +116,17 @@ export const getSearchUser = async (req, res) => {
 	try {
 		const getOnlyFollowingUser = req.query.onlyFollowingUser;
 		const searchVal = req.query.search;
+		const userId = req.user._id;
 
 		let query;
 
 		const forName = { name: { $regex: searchVal, $options: "i" } };
 
 		if (getOnlyFollowingUser === "true") {
-			const followingUserIds = req.user.following;
+			const userFollowingList = await User.findById(userId, { following: 1 });
+
 			query = {
-				$and: [{ _id: { $in: followingUserIds } }, forName],
+				$and: [{ _id: { $in: userFollowingList } }, forName],
 			};
 		} else query = forName;
 
@@ -135,13 +176,6 @@ export const getUserProfile = async (req, res, next) => {
 		]);
 
 		user = user[0];
-
-		if (user.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-			const userId = user._id;
-			const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
-			const imgUrl = await getUrl(key);
-			user.img = imgUrl;
-		}
 
 		const { isStory, isSeen } = await storySeenInfo(user._id, mainUserId);
 

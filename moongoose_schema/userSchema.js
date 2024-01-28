@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 import validator from "validator";
 import bcrypt from "bcryptjs";
 import CONSTANTS from "../utlis/constants/constants.js";
-import { getUrl } from "../services/s3-bucket/s3.js";
+import getUserImgUrl from "../helpers/getUserImgUrl.js";
 
 const userSchema = new mongoose.Schema({
 	name: {
@@ -54,23 +54,23 @@ const userSchema = new mongoose.Schema({
 	},
 });
 
+userSchema.post("aggregate", async function (doc) {
+	let userWithImgUrl = doc.map(async (user) => {
+		return getUserImgUrl(user);
+	});
+	userWithImgUrl = await Promise.all(userWithImgUrl);
+});
+
 userSchema.post(/^find/, async function (doc) {
-	const conditionsFn = async (user) => {
-		if (user.img !== CONSTANTS.DEFAULT_USER_IMG_URL) {
-			const userId = user._id;
-			const key = `${userId}/${CONSTANTS.PROFILE_PIC_POST_ID}.jpg`;
-			const imgUrl = await getUrl(key);
-			user.img = imgUrl;
-		}
-		return user;
-	};
+	if (!doc) return;
+	if (this.options.disableMiddlewares) return;
 
 	if (Array.isArray(doc)) {
 		let userWithImgUrl = doc.map(async (user) => {
-			return conditionsFn(user);
+			return getUserImgUrl(user);
 		});
 		userWithImgUrl = await Promise.all(userWithImgUrl);
-	} else await conditionsFn(doc);
+	} else await getUserImgUrl(doc);
 });
 
 userSchema.pre("save", async function (next) {

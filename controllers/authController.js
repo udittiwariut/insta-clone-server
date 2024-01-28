@@ -15,7 +15,11 @@ export const singIn = async (req, res) => {
 			});
 		}
 
-		const existingUser = await User.findOne({ $or: [{ email }, { name }] });
+		const existingUser = await User.findOne(
+			{ $or: [{ email }, { name }] },
+			{ disableMiddlewares: true }
+		);
+
 		if (existingUser) {
 			if (existingUser.email === email)
 				return res.status(400).json({
@@ -28,11 +32,12 @@ export const singIn = async (req, res) => {
 		}
 		const user = await User.create(data);
 
+		console.log(user);
+
 		const token = jwt.sign({ _id: user._id }, process.env.JWT_SECRET, {
 			expiresIn: process.env.TOKEN_EXPIRE,
 		});
 
-		// await sendMail(email, name);
 		return res.status(201).json({
 			status: CONSTANTS.SUCCESSFUL,
 			user,
@@ -100,7 +105,12 @@ export const protect = async (req, res, next) => {
 		if (!decoded._id) {
 			throw new Error("Invalid token or session expired");
 		}
-		const user = await User.findById(decoded._id);
+
+		const user = await User.findById(
+			decoded._id,
+			{ _id: 1 },
+			{ disableMiddlewares: true }
+		);
 
 		if (!user) {
 			throw new Error("User not found");

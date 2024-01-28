@@ -10,19 +10,25 @@ import {
 import { getIndividualPost } from "./postController.js";
 import Notification from "../moongoose_schema/notificationSchema.js";
 import Post from "../moongoose_schema/postSchema.js";
+import User from "../moongoose_schema/userSchema.js";
 
 const ObjectId = mongoose.Types.ObjectId;
 
 export const postComment = async (req, res) => {
 	try {
 		// eslint-disable-next-line no-unused-vars
-		const { following, email, followers, bio, ...user } = req.user._doc;
 
 		const postId = req.params.postId;
 		const parentId = req.query.parentId === "null" ? null : req.query.parentId;
 		const replyTo = req.query.replyToId === "null" ? null : req.query.replyToId;
 		const userId = req.user._id;
 		const commentText = req.body.commentText;
+		const user = await User.findById(userId, {
+			following: 0,
+			email: 0,
+			followers: 0,
+			bio: 0,
+		});
 
 		let newComment = await Comment.create({
 			postId,

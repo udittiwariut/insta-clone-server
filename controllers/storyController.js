@@ -21,9 +21,9 @@ import Notification from "../moongoose_schema/notificationSchema.js";
 export const getFeedStories = async (req, res) => {
 	try {
 		const mainUserId = req.user._id;
-		const followingUser = req.user.following;
+		const userFollowingList = await User.findById(mainUserId, { following: 1 });
 
-		const redisSearchQuery = `${followingUser
+		const redisSearchQuery = `${userFollowingList.following
 			.toString()
 			.split(",")
 			.join(" | ")}`;
@@ -369,7 +369,7 @@ export const getInteractionDetail = async (req, res) => {
 export const getIndividualStory = async (req, res) => {
 	try {
 		const storyId = req.params.storyId;
-		const user = req.user;
+		const user = await User.findById(req.user._id, { name: 1, img: 1 });
 
 		const story = await Story.findById(storyId);
 
