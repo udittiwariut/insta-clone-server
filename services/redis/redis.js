@@ -2,7 +2,7 @@ import { createClient } from "redis";
 import { SchemaFieldTypes } from "redis";
 import CONSTANTS from "../../utlis/constants/constants.js";
 
-const redisClient = createClient(process.env.REDIS_PORT, "127.0.0.1");
+const redisClient = createClient({ pingInterval: 100 });
 
 redisClient
 	.connect()
