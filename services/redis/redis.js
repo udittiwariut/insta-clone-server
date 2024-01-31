@@ -2,7 +2,7 @@ import { createClient } from "redis";
 import { SchemaFieldTypes } from "redis";
 import CONSTANTS from "../../utlis/constants/constants.js";
 
-const redisClient = createClient({ pingInterval: 100 });
+const redisClient = createClient({ url: "redis://redis:6379" });
 
 redisClient
 	.connect()
